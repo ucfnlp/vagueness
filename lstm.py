@@ -29,6 +29,8 @@ dict_file = 'words.dict'
 embedding_file = 'GoogleNews-vectors-negative300.bin'
 vague_file = 'vague_terms'
 
+fast = True
+
 vocab_size = 5000
 embedding_dim = 300
 maxlen = 50
@@ -37,6 +39,10 @@ batch_size = 32
 nb_epoch = 30
 samples_per_epoch = 107076
 #samples_per_epoch = 100
+
+if fast:
+    nb_epoch = 1
+    samples_per_epoch = 100
 
 # load file, one sentence per line
 sentences = []
@@ -205,6 +211,7 @@ states = outfile.create_dataset('output1', (total_word_ids, hidden_dim))
 
 pos = 0
 for kk in xrange(len(X_raw)):
+    print(kk)
     layer_output = get_hidden_layer([X_padded[kk:kk+1], 0])[0]
     layer_output = layer_output.reshape(layer_output.shape[1], layer_output.shape[2])
     sent_len = maxlen if len(X_raw[kk]) > maxlen else len(X_raw[kk])
@@ -214,7 +221,7 @@ for kk in xrange(len(X_raw)):
 
 outfile.flush()
 outfile.close()
-
+print('done')
 
 
 
