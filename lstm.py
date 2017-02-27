@@ -14,9 +14,6 @@ from collections import OrderedDict
 import gensim
 from gensim.models.word2vec import Word2Vec
 
-from keras.metrics import recall
-from keras.utils.np_utils import accuracy
-
 numpy.random.seed(123)
 from keras.preprocessing.text import Tokenizer
 from keras.preprocessing.sequence import pad_sequences
@@ -37,8 +34,9 @@ vague_file = 'vague_terms'
 program_state_file = 'program_state'
 predict_file = 'predictions.h5'
 predict_vague_file = 'predictions_vague.h5'
+model_file = 'model_LM_V.h5'
  
-fast = True
+fast = False
  
 vocab_size = 5000
 embedding_dim = 300
@@ -56,103 +54,103 @@ if fast:
  
  
  
-# # load file, one sentence per line
-# sentences = []
-# end_tag = ['</s>']
-# with codecs.open(train_file) as infile:
-#     for line in infile:
-#         words = line.strip().split() + end_tag
-#         sentences.append(' '.join(words))
-# print('total number of sentences in train file: %d' % len(sentences))
-#   
-# # tokenize, create vocabulary
-# tokenizer = Tokenizer(nb_words=vocab_size, filters=' ')
-# tokenizer.fit_on_texts(sentences)
-# word_id_seqs = tokenizer.texts_to_sequences(sentences)
-# print('finished creating the dictionary')
-#   
-# # output dictionary
-# with codecs.open(dict_file, 'w') as outfile:
-#     for word, idx in sorted(tokenizer.word_index.items(), key=operator.itemgetter(1)):
-#         outfile.write('%s %d\n' % (word, idx))
-#   
-# # output list of word ids
-# total_word_ids = 0
-# my_word_ids = []
-# for word_id_seq in word_id_seqs:
-#     for word_id in word_id_seq[-maxlen-1:]: #TODO
-#         total_word_ids += 1
-#         my_word_ids.append(word_id)
-#   
-# outfile = h5py.File(word_id_file, 'w')
-# states = outfile.create_dataset('words', data=numpy.array(my_word_ids))
-# outfile.flush()
-# outfile.close()
-#   
-#   
-# # load file containing vague terms
-# vague_terms = []
-# with codecs.open(vague_file) as infile:
-#     for line in infile:
-#         words = line.strip().split()
-#         word_ids = []
-#         for w in words: 
-#             word_ids.append(tokenizer.word_index[w] if w in tokenizer.word_index else 0)
-#         vague_terms.append(word_ids)
-#   
-# # prepare data
-# X_raw = []
-# Y_raw = []
-# Y_vague = []
-#   
-# # calculate statistics
-# total_vague_terms = 0
-# total_terms = 0
-# total_vague_sents = 0
-#   
-# for word_id_seq in word_id_seqs:
-#     X_raw.append(word_id_seq[:-1])
-#     Y_raw.append(word_id_seq[1:])
-#       
-#     X_curr = word_id_seq[:-1]
-#     X_curr_len = len(X_curr)
-#     Y_curr = [0] * X_curr_len
-#     for idx in xrange(X_curr_len):
-#         for gap in xrange(1,6):
-#             if idx + gap > X_curr_len: break
-#             if X_curr[idx:idx+gap] in vague_terms:
-#                 Y_curr[idx:idx+gap] = [1] * gap
-#     Y_vague.append(Y_curr)
-#       
-#     vague_flag = 0
-#     for vv in Y_curr:
-#         if vv == 1: 
-#             total_vague_terms += 1
-#             vague_flag = 1
-#     total_terms += X_curr_len
-#     if vague_flag == 1: total_vague_sents += 1
-#       
-#       
-# print('total vague terms: %d' % (total_vague_terms))
-# print('total vague sentences: %d' % (total_vague_sents))
-# print('total terms: %d' % (total_terms))
-#          
-# # prepare embedding weights
-# word2vec_model = Word2Vec.load_word2vec_format(embedding_file, binary=True)
-# embedding_weights = numpy.zeros((vocab_size, embedding_dim), dtype=theano.config.floatX)
-#  
-# n_words_in_word2vec = 0
-# n_words_not_in_word2vec = 0
-#  
-# for word, idx in tokenizer.word_index.items():
-#     if idx < vocab_size:
-#         try: 
-#             embedding_weights[idx,:] = word2vec_model[word]
-#             n_words_in_word2vec += 1
-#         except:
-#             embedding_weights[idx,:] = 0.01 * numpy.random.randn(1, embedding_dim).astype(theano.config.floatX)
-#             n_words_not_in_word2vec += 1
-# print('%d words found in word2vec, %d are not' % (n_words_in_word2vec, n_words_not_in_word2vec))
+# load file, one sentence per line
+sentences = []
+end_tag = ['</s>']
+with codecs.open(train_file) as infile:
+    for line in infile:
+        words = line.strip().split() + end_tag
+        sentences.append(' '.join(words))
+print('total number of sentences in train file: %d' % len(sentences))
+   
+# tokenize, create vocabulary
+tokenizer = Tokenizer(nb_words=vocab_size, filters=' ')
+tokenizer.fit_on_texts(sentences)
+word_id_seqs = tokenizer.texts_to_sequences(sentences)
+print('finished creating the dictionary')
+   
+# output dictionary
+with codecs.open(dict_file, 'w') as outfile:
+    for word, idx in sorted(tokenizer.word_index.items(), key=operator.itemgetter(1)):
+        outfile.write('%s %d\n' % (word, idx))
+   
+# output list of word ids
+total_word_ids = 0
+my_word_ids = []
+for word_id_seq in word_id_seqs:
+    for word_id in word_id_seq[-maxlen-1:]: #TODO
+        total_word_ids += 1
+        my_word_ids.append(word_id)
+   
+outfile = h5py.File(word_id_file, 'w')
+states = outfile.create_dataset('words', data=numpy.array(my_word_ids))
+outfile.flush()
+outfile.close()
+   
+   
+# load file containing vague terms
+vague_terms = []
+with codecs.open(vague_file) as infile:
+    for line in infile:
+        words = line.strip().split()
+        word_ids = []
+        for w in words: 
+            word_ids.append(tokenizer.word_index[w] if w in tokenizer.word_index else 0)
+        vague_terms.append(word_ids)
+   
+# prepare data
+X_raw = []
+Y_raw = []
+Y_vague = []
+   
+# calculate statistics
+total_vague_terms = 0
+total_terms = 0
+total_vague_sents = 0
+   
+for word_id_seq in word_id_seqs:
+    X_raw.append(word_id_seq[:-1])
+    Y_raw.append(word_id_seq[1:])
+       
+    X_curr = word_id_seq[:-1]
+    X_curr_len = len(X_curr)
+    Y_curr = [0] * X_curr_len
+    for idx in xrange(X_curr_len):
+        for gap in xrange(1,6):
+            if idx + gap > X_curr_len: break
+            if X_curr[idx:idx+gap] in vague_terms:
+                Y_curr[idx:idx+gap] = [1] * gap
+    Y_vague.append(Y_curr)
+       
+    vague_flag = 0
+    for vv in Y_curr:
+        if vv == 1: 
+            total_vague_terms += 1
+            vague_flag = 1
+    total_terms += X_curr_len
+    if vague_flag == 1: total_vague_sents += 1
+       
+       
+print('total vague terms: %d' % (total_vague_terms))
+print('total vague sentences: %d' % (total_vague_sents))
+print('total terms: %d' % (total_terms))
+          
+# prepare embedding weights
+word2vec_model = Word2Vec.load_word2vec_format(embedding_file, binary=True)
+embedding_weights = numpy.zeros((vocab_size, embedding_dim), dtype=theano.config.floatX)
+  
+n_words_in_word2vec = 0
+n_words_not_in_word2vec = 0
+  
+for word, idx in tokenizer.word_index.items():
+    if idx < vocab_size:
+        try: 
+            embedding_weights[idx,:] = word2vec_model[word]
+            n_words_in_word2vec += 1
+        except:
+            embedding_weights[idx,:] = 0.01 * numpy.random.randn(1, embedding_dim).astype(theano.config.floatX)
+            n_words_not_in_word2vec += 1
+print('%d words found in word2vec, %d are not' % (n_words_in_word2vec, n_words_not_in_word2vec))
 #   
 #   
 #   
@@ -171,12 +169,12 @@ if fast:
 # print('done shelving')
 
 
-# load program state
-my_shelf = shelve.open(program_state_file)
-for key in my_shelf:
-    globals()[key]=my_shelf[key]
-my_shelf.close()
-print('done loading shelve')
+# # load program state
+# my_shelf = shelve.open(program_state_file)
+# for key in my_shelf:
+#     globals()[key]=my_shelf[key]
+# my_shelf.close()
+# print('done loading shelve')
 
 X_padded = pad_sequences(X_raw, maxlen=maxlen)
 Y_padded = pad_sequences(Y_raw, maxlen=maxlen)
@@ -254,6 +252,7 @@ get_hidden_layer = K.function([model.layers[0].input, K.learning_phase()],
 
 model.fit_generator(batch_generator(train_X_padded, train_Y_padded, train_Y_padded_vague, batch_size), 
                     samples_per_epoch=samples_per_epoch, nb_epoch=nb_epoch)
+model.save(model_file)
 
 #test
 outfile = h5py.File(predict_file, 'w')
@@ -264,8 +263,8 @@ Y_vague_predict = outfile.create_dataset('Y_predict_vague', (test_X_padded.shape
 #     batch_generator(test_X_padded, test_Y_padded, test_Y_padded_vague, batch_size), 
 #     batch_size)
 idx = 0
-# while idx < test_X_padded.shape[0]:
-for i in range(2):
+while idx < test_X_padded.shape[0]:
+# for i in range(2):
     print('Test: ' + str(idx) + '/' + str(test_X_padded.shape[0]))
     end = min(idx + batch_size*10, test_X_padded.shape[0])
     Y_predict[idx:end], Y_vague_predict[idx:end] = model.predict_generator(
