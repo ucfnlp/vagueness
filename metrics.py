@@ -7,11 +7,14 @@ import numpy as np
 
 # computes accuracy and f1 scores
 def performance(predicted, truth):
-    TP = np.sum(predicted[truth == 1] == 1)
-    FP = np.sum(predicted[truth == 0] == 1)
-    TN = np.sum(predicted[truth == 0] == 0)
-    FN = np.sum(predicted[truth == 1] == 0)
-    accuracy = 1.0 * np.sum(predicted == truth) / truth.size
+    assert(predicted.shape == truth.shape)
+    predicted_flat = predicted.flatten()
+    truth_flat = truth.flatten()
+    TP = np.sum(predicted_flat[truth_flat == 1] == 1)
+    FP = np.sum(predicted_flat[truth_flat == 0] == 1)
+    TN = np.sum(predicted_flat[truth_flat == 0] == 0)
+    FN = np.sum(predicted_flat[truth_flat == 1] == 0)
+    accuracy = 1.0 * np.sum(predicted_flat == truth_flat) / truth_flat.size
     precision = 1.0 * TP / ((TP + FP) or 1)
     recall = 1.0 * TP / ((TP + FN) or 1)
     f1 = 2.0 * precision * recall / ((recall + precision) or 1)
