@@ -7,9 +7,9 @@ import numpy as np
 
 # computes accuracy and f1 scores
 def performance(predicted, truth):
-    assert(predicted.shape == truth.shape)
     predicted_flat = predicted.flatten()
     truth_flat = truth.flatten()
+    assert(predicted_flat.shape == truth_flat.shape)
     TP = np.sum(predicted_flat[truth_flat == 1] == 1)
     FP = np.sum(predicted_flat[truth_flat == 0] == 1)
     TN = np.sum(predicted_flat[truth_flat == 0] == 0)

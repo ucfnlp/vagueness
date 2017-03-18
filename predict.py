@@ -16,6 +16,8 @@ predict_vague_file = 'predictions_vague.h5'
 model_file = 'model_V_weighted_loss.h5'
 dataset_file = 'dataset.h5'
 embedding_weights_file = 'embedding_weights.h5'
+Y_vague_predict_file = 'Y_vague_predict.out'
+test_Y_vague_file = 'test_Y_padded_vague.out'
  
 fast = False
  
@@ -45,8 +47,8 @@ while idx < test_X_padded.shape[0] - (test_X_padded.shape[0] % val_samples):
     idx += val_samples
 Y_vague_predict = numpy.round(Y_vague_predict)
 numpy.set_printoptions(threshold=numpy.nan)
-numpy.savetxt('Y_vague_predict.out', Y_vague_predict, delimiter=',', fmt='%d')
-numpy.savetxt('test_Y_padded_vague.out', test_Y_padded_vague, delimiter=',', fmt='%d')
+numpy.savetxt(Y_vague_predict_file, Y_vague_predict, delimiter=',', fmt='%d')
+numpy.savetxt(test_Y_vague_file, test_Y_padded_vague, delimiter=',', fmt='%d')
 accuracy, precision, recall, f1score = performance(Y_vague_predict, test_Y_padded_vague)
 print('Accuracy:\t' + str(accuracy))
 print('Precision:\t' + str(precision))

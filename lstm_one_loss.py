@@ -8,7 +8,7 @@ import h5py
 
 numpy.random.seed(123)
 from keras.models import Sequential, Model, load_model
-from keras.layers import Dense, Dropout, Activation, merge, Input, TimeDistributed
+from keras.layers import Dense, Dropout, Activation, merge, Input, TimeDistributed, Bidirectional
 from keras.layers import Embedding, LSTM, GRU
 from keras.utils import np_utils
 from keras import backend as K
@@ -59,10 +59,10 @@ embedded = Embedding(vocab_size,
               dropout=0.2,
               trainable=False)(my_input)
               
-forwards = GRU(hidden_dim,
+forwards = Bidirectional(GRU(hidden_dim,
                return_sequences=True,
                dropout_W=0.2,
-               dropout_U=0.2)(embedded)
+               dropout_U=0.2))(embedded)
 
 output = Dropout(0.5)(forwards)
 
