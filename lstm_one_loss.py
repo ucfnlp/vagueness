@@ -13,11 +13,14 @@ from keras.layers import Embedding, LSTM, GRU
 from keras.utils import np_utils
 from keras import backend as K
 from keras.regularizers import l2, activity_l2
+# from keras.metrics import precision, recall, f1score, binary_accuracy
+from keras import metrics
 
 from metrics import performance
 from batch_generator import batch_generator
+from objectives import RankNet_mean
 
-model_file = 'model_V_weighted_loss.h5'
+model_file = 'model_V_kinda_highly_weighted_loss_bidir_ranknet.h5'
 dataset_file = 'dataset.h5'
 embedding_weights_file = 'embedding_weights.h5'
  
@@ -84,14 +87,13 @@ output_vague = TimeDistributed(Dense(1, activation='sigmoid'), name='loss_vague'
 
 model = Model(input=my_input, output=[output_vague])
 model.compile(optimizer='rmsprop',
-              loss={'loss_vague':'binary_crossentropy'},
+              loss={'loss_vague': RankNet_mean},
               loss_weights={'loss_vague': 1.},
               metrics=['accuracy'],
               sample_weight_mode='temporal')
 
 get_hidden_layer = K.function([model.layers[0].input, K.learning_phase()],
                                   [model.layers[2].output])
-sample_weight = (train_Y_padded_vague * 40) + 1
 model.fit_generator(batch_generator(train_X_padded, train_Y_padded_vague, batch_size), 
                     samples_per_epoch=samples_per_epoch, nb_epoch=nb_epoch)
 model.save(model_file)

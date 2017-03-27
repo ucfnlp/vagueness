@@ -2,8 +2,8 @@ import numpy
 import cPickle
 import h5py
 
-Y_vague_predict_file = 'Y_vague_predict.out'
-test_Y_vague_file = 'test_Y_padded_vague.out'
+Y_vague_predict_file = 'Y_vague_predict_bidir.out'
+test_Y_vague_file = 'test_Y_padded_vague_bidir.out'
 word_id_seqs_file = 'word_id_seqs.p'
 dataset_file = 'dataset.h5'
 
@@ -43,9 +43,25 @@ for i in range(test_X_padded.shape[0]):
         line += ' '
     line += '\n'
     out += line
-with open('test_Y_padded_vague_words.txt', 'w') as f:
+with open(test_Y_vague_file + '_words.txt', 'w') as f:
     f.write(out)
-a = 0
+out = ''
+for i in range(test_X_padded.shape[0]):
+    line = ''
+    for j in range(test_X_padded.shape[1]):
+        idx = test_X_padded[i][j]
+        if idx == 0:
+            continue
+        word = d[idx]
+        line += word
+        if Y_vague_predict[i][j] == 1:
+            line += '*'
+        line += ' '
+    line += '\n'
+    out += line
+with open(Y_vague_predict_file + '_words.txt', 'w') as f:
+    f.write(out)
+print('done')
 
 
 

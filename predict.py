@@ -12,12 +12,10 @@ from metrics import performance
 from batch_generator import batch_generator
 
 predict_file = 'predictions.h5'
-predict_vague_file = 'predictions_vague.h5'
-model_file = 'model_V_weighted_loss.h5'
+model_file = 'model_V_highly_weighted_loss_bidir.h5'
 dataset_file = 'dataset.h5'
-embedding_weights_file = 'embedding_weights.h5'
-Y_vague_predict_file = 'Y_vague_predict.out'
-test_Y_vague_file = 'test_Y_padded_vague.out'
+Y_words_file = 'train_Y_words_highly_weighted.txt'
+predict_words_file = 'train_predict_words_highly_weighted.txt'
  
 fast = False
  
@@ -27,29 +25,37 @@ val_samples = batch_size * 10
 
 model = load_model(model_file)
 
-print('loading test data')
+
+
+print('loading data')
 with h5py.File(dataset_file, 'r') as data_file:
+    train_X_padded = data_file['train_X'][:]
+    train_Y_padded = data_file['train_Y'][:]
+    train_Y_padded_vague = data_file['train_Y_vague'][:]
     test_X_padded = data_file['test_X'][:]
     test_Y_padded = data_file['test_Y'][:]
     test_Y_padded_vague = data_file['test_Y_vague'][:]
 
+X = train_X_padded
+Y = train_Y_padded_vague
+
 #test
 outfile = h5py.File(predict_file, 'w')
-Y_vague_predict = outfile.create_dataset('Y_predict_vague', (test_X_padded.shape[0], test_X_padded.shape[1], 1))
+predict = outfile.create_dataset('Y_predict_vague', (X.shape[0], X.shape[1], 1))
 idx = 0
-while idx < test_X_padded.shape[0] - (test_X_padded.shape[0] % val_samples):
+while idx < X.shape[0] - (X.shape[0] % val_samples):
 # for i in range(2):
-    print('Test: ' + str(idx) + '/' + str(test_X_padded.shape[0]))
-    end = min(idx + val_samples, test_X_padded.shape[0])
-    Y_vague_predict[idx:end] = model.predict_generator(
-    batch_generator(test_X_padded, test_Y_padded_vague, batch_size), 
+    print('Test: ' + str(idx) + '/' + str(X.shape[0]))
+    end = min(idx + val_samples, X.shape[0])
+    predict[idx:end] = model.predict_generator(
+    batch_generator(X, Y, batch_size), 
     val_samples)
     idx += val_samples
-Y_vague_predict = numpy.round(Y_vague_predict)
-numpy.set_printoptions(threshold=numpy.nan)
-numpy.savetxt(Y_vague_predict_file, Y_vague_predict, delimiter=',', fmt='%d')
-numpy.savetxt(test_Y_vague_file, test_Y_padded_vague, delimiter=',', fmt='%d')
-accuracy, precision, recall, f1score = performance(Y_vague_predict, test_Y_padded_vague)
+predict = numpy.round(predict)
+# numpy.set_printoptions(threshold=numpy.nan)
+# numpy.savetxt(predict_file, predict, delimiter=',', fmt='%d')
+# numpy.savetxt(test_Y_vague_file, Y, delimiter=',', fmt='%d')
+accuracy, precision, recall, f1score = performance(predict, Y)
 print('Accuracy:\t' + str(accuracy))
 print('Precision:\t' + str(precision))
 print('Recall:\t\t' + str(recall))
@@ -57,6 +63,51 @@ print('F1 score:\t' + str(f1score))
 outfile.flush()
 outfile.close()
 
+
+
+if not X.shape[0] == predict.shape[0]:
+    print('X len (' + str(X.shape[0])
+          + ') does not equal predict length (' + str(predict.shape[0]) + ')')
+
+d = {}
+with open("words.dict") as f:
+    for line in f:
+       (val, key) = line.split()
+       d[int(key)] = val
+
+out = ''
+for i in range(X.shape[0]):
+    line = ''
+    for j in range(X.shape[1]):
+        idx = X[i][j]
+        if idx == 0:
+            continue
+        word = d[idx]
+        line += word
+        if Y[i][j] == 1:
+            line += '*'
+        line += ' '
+    line += '\n'
+    out += line
+with open(Y_words_file, 'w') as f:
+    f.write(out)
+out = ''
+for i in range(X.shape[0]):
+    line = ''
+    for j in range(X.shape[1]):
+        idx = X[i][j]
+        if idx == 0:
+            continue
+        word = d[idx]
+        line += word
+        if predict[i][j] == 1:
+            line += '*'
+        line += ' '
+    line += '\n'
+    out += line
+with open(predict_words_file, 'w') as f:
+    f.write(out)
+print('done')
 
 
 

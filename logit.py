@@ -34,7 +34,7 @@ embedding_dim = 300
 maxlen = 50
 hidden_dim = 512
 batch_size = 128
-nb_epoch = 500
+nb_epoch = 200
 samples_per_epoch = None
 train_ratio = 0.8
 
@@ -154,7 +154,9 @@ model.fit(train_X, train_Y, nb_epoch=nb_epoch)
 model.save(model_file)
 
 predictions = model.predict(test_X)
-predictions = numpy.round(predictions)
+threshold = 0.5
+predictions[predictions > threshold] = 1
+predictions[predictions <= threshold] = 0
 accuracy, precision, recall, f1score = performance(predictions, test_Y)
 numpy.savetxt('predictions.txt', predictions, delimiter=',', fmt='%d')
 numpy.savetxt('Y.txt', test_Y, delimiter=',', fmt='%d')
@@ -162,6 +164,51 @@ print('Accuracy:\t' + str(accuracy))
 print('Precision:\t' + str(precision))
 print('Recall:\t\t' + str(recall))
 print('F1 score:\t' + str(f1score))
+
+
+d = {}
+with open("words.dict") as f:
+    for line in f:
+       (val, key) = line.split()
+       d[int(key)] = val
+       
+out = ''
+vague_list = []
+for i in range(test_X.shape[0]):
+    idx = test_X[i]
+    if idx == 0:
+        continue
+    word = d[idx]
+    out += word
+    if test_Y[i] == 1:
+        vague_list.append(word)
+        out += '*'
+    out += '\n'
+vague_str = 'Identified vague words:\n'
+for vague_word in vague_list:
+    vague_str += vague_word + '*\n'
+out = vague_str + '\n' + out
+with open('test_Y_logit.txt', 'w') as f:
+    f.write(out)
+    
+out = ''
+vague_list = []
+for i in range(test_X.shape[0]):
+    idx = test_X[i]
+    if idx == 0:
+        continue
+    word = d[idx]
+    out += word
+    if predictions[i] == 1:
+        vague_list.append(word)
+        out += '*'
+    out += '\n'
+vague_str = 'Identified vague words:\n'
+for vague_word in vague_list:
+    vague_str += vague_word + '*\n'
+out = vague_str + '\n' + out
+with open('predictions_logit.txt', 'w') as f:
+    f.write(out)
 
 print('done')
 
