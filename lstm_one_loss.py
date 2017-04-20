@@ -87,7 +87,7 @@ output_vague = TimeDistributed(Dense(1, activation='sigmoid'), name='loss_vague'
 
 model = Model(input=my_input, output=[output_vague])
 model.compile(optimizer='rmsprop',
-              loss={'loss_vague': RankNet_mean},
+              loss={'loss_vague': 'binary_crossentropy'},
               loss_weights={'loss_vague': 1.},
               metrics=['accuracy'],
               sample_weight_mode='temporal')

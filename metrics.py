@@ -6,14 +6,14 @@ import numpy as np
 
 
 # computes accuracy and f1 scores
-def performance(predicted, truth):
+def performance(predicted, truth, negative_label=0):
     predicted_flat = predicted.flatten()
     truth_flat = truth.flatten()
     assert(predicted_flat.shape == truth_flat.shape)
     TP = np.sum(predicted_flat[truth_flat == 1] == 1)
-    FP = np.sum(predicted_flat[truth_flat == 0] == 1)
-    TN = np.sum(predicted_flat[truth_flat == 0] == 0)
-    FN = np.sum(predicted_flat[truth_flat == 1] == 0)
+    FP = np.sum(predicted_flat[truth_flat == negative_label] == 1)
+    TN = np.sum(predicted_flat[truth_flat == negative_label] == negative_label)
+    FN = np.sum(predicted_flat[truth_flat == 1] == negative_label)
     accuracy = 1.0 * np.sum(predicted_flat == truth_flat) / truth_flat.size
     precision = 1.0 * TP / ((TP + FP) or 1)
     recall = 1.0 * TP / ((TP + FN) or 1)

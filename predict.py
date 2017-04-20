@@ -25,6 +25,11 @@ val_samples = batch_size * 10
 
 model = load_model(model_file)
 
+d = {}
+with open("words.dict") as f:
+    for line in f:
+       (val, key) = line.split()
+       d[int(key)] = val
 
 
 print('loading data')
@@ -68,12 +73,6 @@ outfile.close()
 if not X.shape[0] == predict.shape[0]:
     print('X len (' + str(X.shape[0])
           + ') does not equal predict length (' + str(predict.shape[0]) + ')')
-
-d = {}
-with open("words.dict") as f:
-    for line in f:
-       (val, key) = line.split()
-       d[int(key)] = val
 
 out = ''
 for i in range(X.shape[0]):

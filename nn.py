@@ -23,9 +23,9 @@ from batch_generator import batch_generator
 import objectives
 
 model_file = 'model_V_nn.h5'
-dataset_file = 'dataset.h5'
 embedding_weights_file = 'embedding_weights.h5'
 vague_file = 'vague_terms'
+vague_lack_definition_file = 'vague_terms_lack_definition'
 train_file = 'Privacy_Sentences.txt'
  
 fast = False
@@ -38,6 +38,7 @@ batch_size = 128
 nb_epoch = 100
 samples_per_epoch = None
 train_ratio = 0.8
+negative_label = 0
 
 def splitPerc(l):
     splits = numpy.cumsum([train_ratio*100, (1-train_ratio)*100])/100.
@@ -86,28 +87,38 @@ with codecs.open(vague_file) as infile:
         if len(words) != 1:
             continue
         vague_terms.append(words[0])
+# # load file containing vague terms that lack definition
+# with codecs.open(vague_lack_definition_file) as infile:
+#     for line in infile:
+#         words = line.strip().split()
+#         word_ids = []
+#         for w in words: 
+#             word_ids.append(tokenizer.word_index[w] if w in tokenizer.word_index else 0)
+#         vague_terms.append(word_ids)
         
     
 X = numpy.arange(1,vocab_size)
 Y = numpy.zeros((X.shape))
 for word, idx in sorted(tokenizer.word_index.items(), key=operator.itemgetter(1)):
-    if idx > vocab_size:
+    if idx >= vocab_size:
         break
     if word in vague_terms:
         Y[idx-1] = 1
+    else:
+        Y[idx-1] = negative_label
 permutation = numpy.random.permutation(X.shape[0])
 X = X[permutation]
 Y = Y[permutation]
 X1 = X[Y==1]
 Y1 = Y[Y==1]
-X0 = X[Y==0]
-Y0 = Y[Y==0]
+X0 = X[Y==negative_label]
+Y0 = Y[Y==negative_label]
 train_X1, test_X1 = splitPerc(X1)
 train_Y1, test_Y1 = splitPerc(Y1)
 train_X0, test_X0 = splitPerc(X0)
 train_Y0, test_Y0 = splitPerc(Y0)
-# train_X0 = train_X0[:1000]
-# train_Y0 = train_Y0[:1000]
+# train_X0 = train_X0[:50]
+# train_Y0 = train_Y0[:50]
 train_X = numpy.concatenate((train_X1, train_X0))
 train_Y = numpy.concatenate((train_Y1, train_Y0))
 test_X = numpy.concatenate((test_X1, test_X0))
@@ -132,39 +143,27 @@ flatten = Flatten()(embedded)
 hidden = Dense(100, activation='sigmoid')(flatten)
 forwards = Dense(1, activation='sigmoid')(hidden)
 
-# forwards = GRU(hidden_dim,
-#                return_sequences=True,
-#                dropout_W=0.2,
-#                dropout_U=0.2,
-#                W_regularizer=l2(0.1),
-#                U_regularizer=l2(0.1),
-#                b_regularizer=l2(0.1))(embedded)
-# 
-# output = Dropout(0.5)(forwards)
-# 
-# output_lm = TimeDistributed(Dense(vocab_size, activation='softmax', W_regularizer=l2(0.1), b_regularizer=l2(0.1)), name='loss_lm')(output)
-# output_vague = TimeDistributed(Dense(1, activation='sigmoid', W_regularizer=l2(0.1), b_regularizer=l2(0.1)), name='loss_vague')(output)
-
 model = Model(input=my_input, output=[forwards])
 # optimizer = optimizers.RMSprop(lr=0.001)
 optimizer = 'rmsprop'
 model.compile(optimizer=optimizer,
-#               loss='binary_crossentropy',
+            loss='binary_crossentropy',
 #               loss=RankNet_mean,
-            loss=objectives.binary_crossentropy,
+#             loss=objectives.pairwise_ranking,
               metrics=['accuracy'])
 
-model.fit(train_X, train_Y, nb_epoch=nb_epoch)
+model.fit(train_X, train_Y, nb_epoch=nb_epoch, batch_size=batch_size)
 model.save(model_file)
 
 X = test_X
 Y = test_Y
 
 predictions = model.predict(X)
+# loss = objectives.pairwise_ranking_slow(Y, predictions)
 threshold = 0.5
 predictions[predictions > threshold] = 1
-predictions[predictions <= threshold] = 0
-accuracy, precision, recall, f1score = performance(predictions, Y)
+predictions[predictions <= threshold] = negative_label
+accuracy, precision, recall, f1score = performance(predictions, Y, negative_label)
 numpy.savetxt('predictions.txt', predictions, delimiter=',', fmt='%d')
 numpy.savetxt('Y.txt', Y, delimiter=',', fmt='%d')
 print('Accuracy:\t' + str(accuracy))

@@ -21,7 +21,10 @@ def batch_generator(X_padded, Y_padded_vague, batch_size):
         
         X_batch = X_padded[index_batch]
         Y_batch_vague = Y_padded_vague[index_batch]
-        sample_weights = (Y_batch_vague * 40 + 1).reshape((Y_batch_vague.shape[0], Y_batch_vague.shape[1]))
+        if len(Y_padded_vague.shape) == 1:
+            sample_weights = (Y_batch_vague * 40 + 1).reshape((Y_batch_vague.shape[0]))
+        else:
+            sample_weights = (Y_batch_vague * 40 + 1).reshape((Y_batch_vague.shape[0], Y_batch_vague.shape[1]))
         
         counter += 1
         if counter == number_of_batches:

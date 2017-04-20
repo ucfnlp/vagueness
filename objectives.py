@@ -57,6 +57,24 @@ def pairwise_ranking(y_true, y_pred):
     
     return T.maximum(1. - IW_pos3 + IW_neg3, 0.).mean()
 
+def pairwise_ranking_slow(y_true, y_pred):
+    Input_shape=y_true.shape
+
+    T1=np.reshape(y_true,np.stack(Input_shape[0],1,Input_shape[1]))
+    T2=np.reshape(y_true,np.stack(Input_shape[0],Input_shape[1],1))
+    
+    IW_difference_mat=np.clip(-np.dot(T2,T1),0.,1.)
+    
+    label_predict=y_pred
+    
+    pos_socre_mat=label_predict*np.clip(y_true,0.,1.)
+    neg_socre_mat=label_predict*np.clip(-y_true,0.,1.)
+    
+    IW_pos3=IW_difference_mat*np.reshape(pos_socre_mat,T.stack(Input_shape[0],1,Input_shape[1]))
+    IW_neg3=IW_difference_mat*np.reshape(neg_socre_mat,T.stack(Input_shape[0],Input_shape[1],1))
+    
+    return np.maximum(1. - IW_pos3 + IW_neg3, 0.).mean()
+
 def RankNet_mean(y_true, y_pred):
     Input_shape=y_true.shape
     
@@ -87,6 +105,43 @@ def RankNet_mean(y_true, y_pred):
     O=(IW_neg3[IW_difference_mat.nonzero()]-IW_pos3[IW_difference_mat.nonzero()])
     
     weight_matrix=T.tile(weight_per_image,(1,Input_shape[1],Input_shape[1]))
+    
+    return (T.log(1.+T.exp(O))/weight_matrix[IW_difference_mat.nonzero()]).mean()
+
+def RankNet_mean_slow(y_true, y_pred):
+    Input_shape=y_true.shape
+    
+    # weights
+    positive_tags=np.clip(y_true,0.,1.)
+    negative_tags=np.clip(-y_true,0.,1.)
+    positive_tags_per_im=positive_tags.sum(axis=1)
+    negative_tags_per_im=negative_tags.sum(axis=1)
+    weight_per_image=positive_tags_per_im*negative_tags_per_im
+    weight_per_image=np.reshape(weight_per_image,T.stack(Input_shape[0],1,1))
+#     weight_per_image=T.addbroadcast(weight_per_image,1)
+#     weight_per_image=T.addbroadcast(weight_per_image,2)
+    weight_per_image=T.addbroadcast(weight_per_image,1)
+    weight_per_image=T.addbroadcast(weight_per_image,2)
+
+#instance wise part
+    T1=np.reshape(y_true,np.stack(Input_shape[0],1,Input_shape[1]))
+    T2=np.reshape(y_true,np.stack(Input_shape[0],Input_shape[1],1))
+    
+    IW_difference_mat=np.clip(-T.batched_dot(T2,T1),0.,1.)
+    
+    label_predict=y_pred
+    
+    pos_socre_mat=label_predict*np.clip(y_true,0.,1.)
+    neg_socre_mat=label_predict*np.clip(-y_true,0.,1.)
+    
+#     IW_pos3=IW_difference_mat*T.addbroadcast(np.reshape(pos_socre_mat,T.stack(Input_shape[0],1,Input_shape[1])),1)
+#     IW_neg3=IW_difference_mat*T.addbroadcast(np.reshape(neg_socre_mat,T.stack(Input_shape[0],Input_shape[1],1)),2)
+    IW_pos3=IW_difference_mat*T.addbroadcast(np.reshape(pos_socre_mat,T.stack(Input_shape[0],1,Input_shape[1])),1)
+    IW_neg3=IW_difference_mat*T.addbroadcast(np.reshape(neg_socre_mat,T.stack(Input_shape[0],Input_shape[1],1)),2)
+    
+    O=(IW_neg3[IW_difference_mat.nonzero()]-IW_pos3[IW_difference_mat.nonzero()])
+    
+    weight_matrix=np.tile(weight_per_image,(1,Input_shape[1],Input_shape[1]))
     
     return (T.log(1.+T.exp(O))/weight_matrix[IW_difference_mat.nonzero()]).mean()
 
@@ -135,13 +190,22 @@ def WARP(y_true, y_pred):
     return (T.maximum(1.+pos_neg_dif_vec,0.)).mean()    
         
 def global_pairwise(y_true, y_pred):
-    flatted_prediction=y_pred
-    flatted_GT=y_true
+    flatted_prediction=y_pred.flatten()
+    flatted_GT=y_true.flatten()
     diffe_label_mat=-T.outer(flatted_GT,flatted_GT)# same is -1 otherwise 1
     diffe_label_mat=T.clip(diffe_label_mat,0.,1.)
     pos_to_add=-T.outer(T.clip(flatted_GT,0.,1.),flatted_prediction)
     neg_to_sub=T.outer(flatted_prediction,T.clip(-flatted_GT,0.,1.))
     return T.maximum(0.,1.+(pos_to_add+neg_to_sub)*diffe_label_mat).mean()
+        
+def global_pairwise_slow(y_true, y_pred):
+    flatted_prediction=y_pred.flatten()
+    flatted_GT=y_true.flatten()
+    diffe_label_mat=-np.outer(flatted_GT,flatted_GT)# same is -1 otherwise 1
+    diffe_label_mat=np.clip(diffe_label_mat,0.,1.)
+    pos_to_add=-np.outer(np.clip(flatted_GT,0.,1.),flatted_prediction)
+    neg_to_sub=np.outer(flatted_prediction,np.clip(-flatted_GT,0.,1.))
+    return np.maximum(0.,1.+(pos_to_add+neg_to_sub)*diffe_label_mat).mean()
 
 
 def categorical_crossentropy(y_true, y_pred):
