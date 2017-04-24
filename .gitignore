@@ -3,3 +3,5 @@ states.h5
 *.pyc
 program_state
 predictions.h5
+*.project
+*.pydevproject
