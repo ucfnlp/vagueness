@@ -1,6 +1,3 @@
 eclipse.preferences.version=1
 encoding//code/gru.py=utf-8
-encoding//code/lstm.py=utf-8
 encoding//code/predict.py=utf-8
-encoding//code/predict_annotated.py=utf-8
-encoding//code/preprocessTurk.py=utf-8

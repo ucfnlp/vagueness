@@ -13,11 +13,9 @@ from keras.layers import Embedding, LSTM, GRU
 from keras.utils import np_utils
 from keras import backend as K
 from keras.regularizers import l2
-# from keras.metrics import precision, recall, f1score, binary_accuracy
 from keras import metrics
 from keras.callbacks import EarlyStopping
 
-from metrics import performance
 from batch_generator import batch_generator
 from objectives import RankNet_mean
 
@@ -45,19 +43,15 @@ with h5py.File(embedding_weights_file, 'r') as hf:
     
 print('loading training and test data')
 with h5py.File(dataset_file, 'r') as data_file:
-    train_X_padded = data_file['train_X'][:]
-    train_Y_padded_vague = data_file['train_Y_word'][:]
+    train_X = data_file['train_X'][:]
+    train_Y = data_file['train_Y_word'][:]
     
 howmany = 5000
-train_X_padded = train_X_padded[:howmany]
-train_Y_padded_vague = train_Y_padded_vague[:howmany]
- 
-# train_X_padded = numpy.reshape(train_X_padded, (1, train_X_padded.shape[0]))
-# train_Y_padded_vague = numpy.reshape(train_Y_padded_vague, (1, train_Y_padded_vague.shape[0]))
-# batch_size = 1
+train_X = train_X[:howmany]
+train_Y = train_Y[:howmany]
     
 if not samples_per_epoch:
-    samples_per_epoch = train_X_padded.shape[0]
+    samples_per_epoch = train_X.shape[0]
         
 # build model
 print('building model')
@@ -77,7 +71,6 @@ forwards = Bidirectional(GRU(hidden_dim,
 
 output = Dropout(0.5)(forwards)
 
-#     output_lm = TimeDistributed(Dense(vocab_size, activation='softmax'), name='loss_lm')(output)
 output_vague = TimeDistributed(Dense(1, activation='sigmoid'), name='loss_vague')(output)
 
 # forwards = GRU(hidden_dim,
@@ -104,22 +97,21 @@ get_hidden_layer = K.function([model.layers[0].input, K.learning_phase()],
                                   [model.layers[2].output])
 
 # val_ratio = 0.8
-# val_len = val_ratio * train_X_padded.shape[0]
-# val_X = train_X_padded[:val_len]
-# val_Y = train_Y_padded_vague[:val_len]
-# train_X_padded = train_X_padded[val_len:]
-# train_Y_padded_vague = train_Y_padded_vague[val_len:]
+# val_len = val_ratio * train_X.shape[0]
+# val_X = train_X[:val_len]
+# val_Y = train_Y[:val_len]
+# train_X = train_X[val_len:]
+# train_Y = train_Y[val_len:]
 # sample_weights = (val_Y * 40 + 1).reshape((val_Y.shape[0], val_Y.shape[1]))
 # earlyStopping=EarlyStopping(monitor='val_loss', patience=10, verbose=0, mode='auto')
-# model.fit_generator(batch_generator(train_X_padded, train_Y_padded_vague, batch_size), 
+# model.fit_generator(batch_generator(train_X, train_Y, batch_size), 
 #                     samples_per_epoch=samples_per_epoch, nb_epoch=nb_epoch, 
 #                     callbacks=[earlyStopping], validation_data=(val_X, val_Y) )
 
 earlyStopping=EarlyStopping(monitor='val_loss', patience=10, verbose=0, mode='auto')
-model.fit(train_X_padded, train_Y_padded_vague, batch_size=batch_size, nb_epoch=nb_epoch, verbose=1, callbacks=[earlyStopping], 
-          validation_split=0.2, validation_data=None, shuffle=True,
-          class_weight=None, sample_weight=None)
-# model.fit(train_X_padded, train_Y_padded_vague,
+model.fit(train_X, train_Y, batch_size=batch_size, nb_epoch=nb_epoch,
+          callbacks=[earlyStopping], validation_split=0.2,)
+# model.fit(train_X, train_Y,
 #                     batch_size=batch_size, nb_epoch=nb_epoch)
 model.save(model_file)
 
