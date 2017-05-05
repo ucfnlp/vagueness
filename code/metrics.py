@@ -15,9 +15,18 @@ def performance(predicted, truth, negative_label=0):
     TN = np.sum(predicted_flat[truth_flat == negative_label] == negative_label)
     FN = np.sum(predicted_flat[truth_flat == 1] == negative_label)
     accuracy = 1.0 * np.sum(predicted_flat == truth_flat) / truth_flat.size
-    precision = 1.0 * TP / ((TP + FP) or 1)
-    recall = 1.0 * TP / ((TP + FN) or 1)
-    f1 = 2.0 * precision * recall / ((recall + precision) or 1)
+    if TP + FP == 0:
+        precision = 1.0
+    else:
+        precision = 1.0 * TP / (TP + FP)
+    if TP + FN == 0:
+        recall = 1.0
+    else:
+        recall = 1.0 * TP / (TP + FN)
+    if recall + precision == 0:
+        f1 = 0.0
+    else:
+        f1 = 2.0 * precision * recall / (recall + precision)
 #     sensitivity = 1.0 * TP / ((TP + FN)  or 1)
 #     specificity = 1.0 * TN / ((TN + FP) or 1)
     return accuracy, precision, recall, f1

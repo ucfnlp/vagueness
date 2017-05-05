@@ -20,9 +20,9 @@ from metrics import performance
 from batch_generator import batch_generator
 from objectives import RankNet_mean
 
-model_file = 'model_V_kinda_highly_weighted_loss_bidir_ranknet.h5'
-dataset_file = 'dataset.h5'
-embedding_weights_file = 'embedding_weights.h5'
+model_file = '../models/model_V_kinda_highly_weighted_loss_bidir_ranknet.h5'
+dataset_file = '../data/dataset.h5'
+embedding_weights_file = '../data/embedding_weights.h5'
  
 fast = False
  

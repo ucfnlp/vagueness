@@ -4,7 +4,7 @@
 import csv
 import json
 
-csv_file = '../data/Batch_0_999_approval_4_sorted.csv'
+csv_file = '../data/Batch_0_999_approval_7_sorted.csv'
 vague_sents_doc_file = '../data/vague_sents_doc.txt'
 clean_data_json = '../data/clean_data.json'
 

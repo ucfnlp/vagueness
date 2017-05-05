@@ -1,0 +1,741 @@
+may: 150
+information: 99
+personal information: 92
+third parties: 44
+some: 39
+third party: 32
+certain: 22
+services: 20
+other: 19
+other information: 16
+third-party: 16
+generally: 15
+might: 14
+certain information: 14
+personally identifiable information: 13
+time to time: 12
+most: 11
+personal data: 10
+general: 10
+content: 9
+wizards: 9
+cookies: 8
+sometimes: 8
+aggregate: 8
+necessary: 8
+appropriate: 8
+others: 7
+service providers: 7
+reasonably: 7
+disclose: 7
+may be: 7
+use: 6
+periodically: 6
+various: 6
+access: 5
+affiliates: 5
+usually: 5
+data: 5
+personal: 5
+certain features: 5
+features: 5
+service: 5
+many: 5
+from time to time: 5
+this: 4
+preferences: 4
+identifiable: 4
+process: 4
+needs: 4
+provide: 4
+identifiable information: 4
+reasonable: 4
+interaction: 4
+business partners: 4
+tailor: 4
+automatically: 4
+applicable law: 4
+limited: 3
+applicable: 3
+such information: 3
+typically: 3
+it: 3
+outside entities: 3
+non-personal: 3
+effective: 3
+instances: 3
+interact: 3
+such as: 3
+that: 3
+believe: 3
+depending: 3
+subject: 3
+financial information: 3
+some cases: 3
+relevant: 3
+policies: 3
+used: 3
+contractors: 3
+contact information: 3
+reasonably necessary: 3
+may not: 3
+disclosure: 3
+knowingly: 3
+functions: 3
+personally: 2
+activities: 2
+other services: 2
+certain services: 2
+shared: 2
+change: 2
+experience: 2
+products: 2
+changes: 2
+similar technologies: 2
+interception: 2
+few: 2
+other purposes: 2
+good faith: 2
+particular: 2
+rights: 2
+personally identifiable: 2
+purposes: 2
+among other things: 2
+privacy statement: 2
+customer information: 2
+relevant information: 2
+occasionally: 2
+subsidiaries: 2
+intended: 2
+other countries: 2
+or others: 2
+such: 2
+types: 2
+register: 2
+allow: 2
+things: 2
+inquiries: 2
+various components: 2
+practice: 2
+they: 2
+might not: 2
+other companies: 2
+nonessential: 2
+essential features: 2
+advertisers: 2
+assist: 2
+cookie: 2
+other places: 2
+retain: 2
+assign: 2
+prevent: 2
+another: 2
+anyone: 2
+privacy: 2
+limited circumstances: 2
+pixel tags: 2
+concerns: 2
+on occasion: 2
+significant: 2
+device: 2
+where appropriate: 2
+situations: 2
+controls: 2
+legitimate: 2
+cras: 2
+settings: 2
+processed: 2
+non-personally: 2
+outside: 2
+web beacons: 2
+other content: 2
+improve: 2
+protect: 2
+requests: 2
+otherwise: 2
+decline: 2
+other websites: 2
+nonessential technical information: 2
+choose: 2
+may use: 2
+may share: 2
+other means: 2
+these: 2
+choices: 2
+if: 2
+the service: 2
+opt out: 2
+several: 2
+other types: 2
+purpose: 2
+social media service: 2
+some services: 2
+third-parties: 2
+share information: 2
+optional information: 2
+other technologies: 2
+not limited to: 2
+similar data: 2
+collect: 2
+discretion: 2
+contact: 2
+non-personal information: 2
+anonymous information: 2
+host: 2
+ensure: 2
+marketing purposes: 2
+beacons: 2
+transfer: 2
+sections: 2
+offer: 2
+us: 2
+similar: 2
+pii: 2
+associated: 2
+any information: 2
+details: 2
+aggregated: 2
+assume: 2
+required: 2
+customary: 1
+consider: 1
+lots of ways: 1
+special offers: 1
+tracking technology: 1
+browsers: 1
+little technical: 1
+integrity: 1
+retention: 1
+relationships: 1
+clickstream: 1
+eligible: 1
+privacy practices: 1
+tracking technologies: 1
+send: 1
+relevant third party: 1
+these cases: 1
+include: 1
+certain area: 1
+special savings: 1
+interactive activities: 1
+pursuant: 1
+sponsors: 1
+information practices: 1
+updates: 1
+affect: 1
+in the future: 1
+intentional crimes: 1
+one another: 1
+altering: 1
+supplement: 1
+other persons: 1
+enhance: 1
+inspection: 1
+enforce: 1
+third party providers: 1
+webmasters: 1
+serve ads: 1
+htm: 1
+maintain: 1
+likely: 1
+notwithstanding: 1
+further: 1
+any purpose: 1
+period of time: 1
+click-through: 1
+revised: 1
+highly qualified: 1
+assistance: 1
+selected: 1
+supplied: 1
+strictly necessary: 1
+other digital content: 1
+interceptions of compromises: 1
+metadata: 1
+deemed: 1
+connection information: 1
+editorial: 1
+concepts: 1
+modify: 1
+lock symbol: 1
+affiliated: 1
+anyone else: 1
+doing this: 1
+engage: 1
+compliance: 1
+wherever: 1
+merger: 1
+other cases: 1
+periodic: 1
+certain products: 1
+browsing: 1
+opinion: 1
+uniquely: 1
+similar promotion: 1
+useful: 1
+secure: 1
+classification: 1
+various facilities: 1
+merely: 1
+manage: 1
+information about other people: 1
+off-pinterest data: 1
+other non-personally identifiable information: 1
+subsequent purchaser: 1
+tools: 1
+non-personally identifying: 1
+such things: 1
+contains: 1
+tell: 1
+more: 1
+tailored: 1
+other action: 1
+good faith efforts: 1
+posting: 1
+expose: 1
+reasonable steps: 1
+trust solutions: 1
+effort: 1
+potential: 1
+other transactional information: 1
+evolves: 1
+can: 1
+learn: 1
+fulfill: 1
+and others: 1
+something: 1
+control: 1
+reasonable efforts: 1
+providers: 1
+share: 1
+session cookies: 1
+can be: 1
+forms: 1
+guarantee: 1
+general content: 1
+feature: 1
+information collection: 1
+varies: 1
+necessary changes: 1
+product: 1
+the feature: 1
+extent necessary: 1
+collection: 1
+disable: 1
+designed: 1
+response: 1
+retention period: 1
+liability: 1
+whenever: 1
+among others: 1
+appreciate: 1
+anytime: 1
+any country: 1
+generic: 1
+tracking utility: 1
+operate: 1
+unencoded format: 1
+erasing: 1
+unsolicited: 1
+legal notice: 1
+period necessary: 1
+consent: 1
+trusted agents: 1
+entity: 1
+disabled: 1
+whilst: 1
+common sources: 1
+including: 1
+other businesses: 1
+monitor: 1
+good-faith belief: 1
+how: 1
+better: 1
+contact preferences: 1
+for others: 1
+internal purposes: 1
+prepopulate: 1
+them: 1
+someone: 1
+demographic information: 1
+sister companies: 1
+records: 1
+transmissions: 1
+unaffiliated companies: 1
+other service providers: 1
+expedite: 1
+assess: 1
+as necessary: 1
+occasions: 1
+those services: 1
+identified: 1
+affiliate: 1
+references: 1
+domain: 1
+rigorous standards: 1
+logs: 1
+non- personal: 1
+in most instances: 1
+personalization: 1
+joint venture: 1
+unique identifier: 1
+some things: 1
+adequately: 1
+network: 1
+internet company: 1
+treated securely: 1
+site-related services: 1
+internet: 1
+suggesting: 1
+particular registration: 1
+integrated: 1
+could be: 1
+footprint: 1
+enforce compliance: 1
+interactions: 1
+maintains: 1
+browsing actions: 1
+standard: 1
+release: 1
+reason: 1
+conditioning: 1
+amazon.com: 1
+regulatory: 1
+if any: 1
+intellectual property infringements: 1
+launch: 1
+determining: 1
+affiliated entities: 1
+may make: 1
+place: 1
+prohibited content: 1
+promotion: 1
+most features: 1
+illegal acts: 1
+persistent cookies: 1
+malicious activity: 1
+linking: 1
+other marketing programs: 1
+such sites: 1
+third party web sites: 1
+change information: 1
+surveys: 1
+necessarily: 1
+may assign: 1
+third party service provider: 1
+meaningful: 1
+their functions: 1
+indicate: 1
+other third parties: 1
+statement: 1
+consistent: 1
+interests: 1
+repetitive: 1
+few weeks: 1
+governmental authorities: 1
+serve: 1
+somewhat: 1
+consult: 1
+other entities: 1
+updating: 1
+impractical: 1
+outside service providers: 1
+other users: 1
+patients: 1
+future: 1
+normally: 1
+accessed: 1
+promotional materials: 1
+screen out: 1
+acquisition: 1
+browser: 1
+gathering: 1
+modern: 1
+bottom task bar: 1
+contest: 1
+marketing partners: 1
+contents: 1
+option: 1
+customise: 1
+jurisdictions: 1
+a mechanism: 1
+mechanism: 1
+co-branded: 1
+strategic partners: 1
+which: 1
+some of our services: 1
+personalized: 1
+third party system: 1
+general log: 1
+customize: 1
+who: 1
+user behavior: 1
+systems: 1
+imported: 1
+when we believe: 1
+class: 1
+appear: 1
+redirecting: 1
+various interactive activities: 1
+request: 1
+security consultant: 1
+unreasonably: 1
+points: 1
+certain pages: 1
+mailing: 1
+repeatedly: 1
+operations: 1
+think: 1
+important notices: 1
+uf-sponsored: 1
+certain devices: 1
+certain areas: 1
+participate: 1
+some examples: 1
+more information: 1
+online ads: 1
+entities: 1
+site-specific ways: 1
+most browsers: 1
+local: 1
+exclusive content: 1
+non-affiliated: 1
+promotional information: 1
+means: 1
+certain actions: 1
+client applications: 1
+right available: 1
+general terms: 1
+appropriate link: 1
+certain personal data: 1
+emails: 1
+unauthorized: 1
+alteration: 1
+summary: 1
+privacy policy: 1
+similar transactions: 1
+certain applications: 1
+demographic studies: 1
+unique device identifiers: 1
+legal guardians: 1
+those actions: 1
+respond: 1
+downloadable projects: 1
+acquired: 1
+transferred: 1
+system administration: 1
+detect: 1
+third party contractors: 1
+participant: 1
+sites: 1
+secure transmission: 1
+further information: 1
+such data: 1
+other companies and individuals: 1
+conditions: 1
+available: 1
+fpas: 1
+terms: 1
+parent: 1
+opt-out: 1
+personalize: 1
+broad demographic information: 1
+in general: 1
+web sites: 1
+previously: 1
+verifiable permission: 1
+participating: 1
+assure: 1
+interactive: 1
+shared databases: 1
+some respects: 1
+related entities: 1
+address: 1
+period: 1
+venues: 1
+offerings: 1
+xkcd: 1
+recognises: 1
+platform: 1
+for example: 1
+some visits: 1
+recognised: 1
+collected: 1
+non-pii: 1
+hardly: 1
+enable: 1
+the information: 1
+or confirm: 1
+service messages: 1
+other organisations: 1
+survey: 1
+publicly: 1
+related applications: 1
+employ: 1
+certain records: 1
+various areas: 1
+post notice: 1
+joint offerings: 1
+site: 1
+remember information: 1
+partner: 1
+these features: 1
+different: 1
+develop: 1
+legal process: 1
+etc: 1
+internal marketing: 1
+same: 1
+affiliated companies: 1
+potentially: 1
+one or more: 1
+certain parts: 1
+legal requirements: 1
+independent: 1
+tell us: 1
+most likely: 1
+proper way: 1
+statistical information: 1
+frequently: 1
+their technology: 1
+protected: 1
+opportunity: 1
+recent: 1
+may also include: 1
+non-personally identifying data: 1
+cross-reference: 1
+anybody: 1
+analysis: 1
+obviously: 1
+patterns: 1
+practices: 1
+technical information: 1
+communications: 1
+claims: 1
+corporate affiliates: 1
+additional privacy rights: 1
+actions: 1
+identify: 1
+public information: 1
+appropriate credit card company: 1
+occasional: 1
+legitimately: 1
+specifically identify: 1
+may vary: 1
+supply: 1
+logged: 1
+interested: 1
+combine: 1
+board: 1
+usage: 1
+accomodate: 1
+disproportionate: 1
+independently: 1
+other preferences: 1
+format: 1
+some features: 1
+dart: 1
+possibly: 1
+push notifications: 1
+traffic: 1
+phpbb: 1
+unique: 1
+recipient: 1
+amend: 1
+security policies and procedures: 1
+relevant jurisdiction: 1
+such cases: 1
+specific: 1
+individuals: 1
+steps: 1
+either: 1
+offenders: 1
+reasonable care: 1
+voluntarily: 1
+your information: 1
+essential: 1
+methods: 1
+aggregate information: 1
+aggregate form: 1
+third-party service providers: 1
+general users: 1
+third-party services: 1
+corporate rules: 1
+third party organisations: 1
+anticlown: 1
+provider: 1
+participation: 1
+data analysis: 1
+marketing: 1
+once in a while: 1
+exciting: 1
+permitted: 1
+persistent identifiers: 1
+goods: 1
+national security: 1
+verifiable consent: 1
+similar information: 1
+range: 1
+provide information: 1
+more specific: 1
+prominently: 1
+rectification: 1
+general audience: 1
+administer: 1
+user information: 1
+involvement: 1
+commercially available sources: 1
+parties: 1
+bankruptcy: 1
+other technology: 1
+additional: 1
+various types: 1
+where relevant: 1
+these third parties: 1
+analyze: 1
+function: 1
+certain things: 1
+follow-up information: 1
+cookie data: 1
+types of information: 1
+hear: 1
+other sources: 1
+can choose to: 1
+other online activities: 1
+additional terms: 1
+come back: 1
+hosting: 1
+specialist partners: 1
+uf: 1
+security: 1
+other laws: 1
+selected partners: 1
+check it out: 1
+as: 1
+right: 1
+outside parties: 1
+marketing preferences: 1
+selected groups: 1
+variety: 1
+privacy policies: 1
+members: 1
+application: 1
+some information: 1
+functionality: 1
+announcements: 1
+reasonably identifiable: 1
+users: 1
+separate: 1
+disclosed: 1
+visits: 1
+includes: 1
+application providers: 1
+profile information: 1
+reorganization: 1
+assets: 1
+may differ: 1
+blend: 1
+intentionally: 1
+outside organization: 1
+most instances: 1
+push: 1

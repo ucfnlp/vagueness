@@ -21,7 +21,6 @@ embedding_file = 'GoogleNews-vectors-negative300.bin'
 vague_file = 'vague_terms'
 dataset_file = 'dataset.h5'
 embedding_weights_file = 'embedding_weights.h5'
-word_id_seqs_file = 'word_id_seqs.p'
  
 vocab_size = 5000
 embedding_dim = 300
@@ -43,8 +42,6 @@ print('total number of sentences in train file: %d' % len(sentences))
 tokenizer = Tokenizer(nb_words=vocab_size, filters=' ')
 tokenizer.fit_on_texts(sentences)
 word_id_seqs = tokenizer.texts_to_sequences(sentences)
-with open(word_id_seqs_file, 'w') as savefile:
-  cPickle.dump(word_id_seqs, savefile)
 print('finished creating the dictionary')
     
 # output dictionary

@@ -31,8 +31,10 @@ maxlen = 50
 # load file, one sentence per line
 sentences = []
 which_document = []
+sentence_ids = []
 document_indices = numpy.random.permutation(list(xrange(total_documents)))[:num_desired_documents]
 doc_ctr = 0
+sentence_idx = 0
 end_tag = ['</s>']
 with codecs.open(train_file) as infile:
     for line in infile:
@@ -41,6 +43,8 @@ with codecs.open(train_file) as infile:
             continue
         words = line.strip().split()
         sentences.append(' '.join(words))
+        sentence_ids.append(sentence_idx)
+        sentence_idx += 1
         which_document.append(doc_ctr)
 print('total number of sentences in train file: %d' % len(sentences))
     
@@ -98,6 +102,7 @@ total_terms = 0
 total_vague_sents = 0
 
 vague_sents = []
+vague_sents_ids = []
 vague_sents_doc = []
     
 for i in range(len(word_id_seqs)):
@@ -125,15 +130,14 @@ for i in range(len(word_id_seqs)):
         total_vague_sents += 1
         if which_document[i] in document_indices:
             vague_sents.append(sentences[i])
+            vague_sents_ids.append(sentence_ids[i])
             vague_sents_doc.append(which_document[i])
         
 with open(vague_sents_csv, 'w') as f:
-    f.write('sentence1,sentence2,sentence3,sentence4,sentence5\n')
-    count = 0;
-    for sent in vague_sents:
-        f.write('"' + sent + '"')
-        count += 1
-        if count % 5 == 0:
+    f.write('sentence1,sentenceid1,docid1,sentence2,sentenceid2,docid2,sentence3,sentenceid3,docid3,sentence4,sentenceid4,docid4,sentence5,sentenceid5,docid5\n')
+    for i in range(len(vague_sents)):
+        f.write('"' + vague_sents[i] + '",' + str(vague_sents_ids[i]) + ',' + str(vague_sents_doc[i]))
+        if i % 5 == 4:
             f.write('\n')
         else:
             f.write(',')

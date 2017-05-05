@@ -31,4 +31,5 @@ def batch_generator(X_padded, Y_padded_vague, batch_size):
             numpy.random.shuffle(shuffle_index)
             counter = 0
 
-        yield (X_batch, [Y_batch_vague], sample_weights)
+#         yield (X_batch, [Y_batch_vague], sample_weights)
+        yield (X_batch, [Y_batch_vague])
