@@ -15,7 +15,7 @@ predict_file = '../predictions/predictions.h5'
 model_file = '../models/model.h5'
 dataset_file = '../data/dataset.h5'
 Y_words_file = '../predictions/Y_words.txt'
-predict_words_file = '../predictions/predictions_wordstxt'
+predict_words_file = '../predictions/predictions_words.txt'
 dictionary_file = '../data/words.dict'
  
 batch_size = 128
@@ -33,8 +33,8 @@ with h5py.File(dataset_file, 'r') as data_file:
     test_Y_padded_vague = data_file['test_Y_word'][:]
 
 howmany = 5000
-X = test_X_padded[:howmany]
-Y = test_Y_padded_vague[:howmany]
+X = train_X_padded[:howmany]
+Y = train_Y_padded_vague[:howmany]
 
 # X = numpy.reshape(X, (1, X.shape[0]))
 # Y = numpy.reshape(Y, (1, Y.shape[0]))
