@@ -1,3 +1,9 @@
 eclipse.preferences.version=1
+encoding//code/acgan.py=utf-8
+encoding//code/acgan_vague.py=utf-8
 encoding//code/gru.py=utf-8
+encoding//code/logit.py=utf-8
+encoding//code/nn.py=utf-8
 encoding//code/predict.py=utf-8
+encoding//code/seq2seq.py=utf-8
+encoding//code/test.py=utf-8
