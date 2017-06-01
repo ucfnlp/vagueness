@@ -98,10 +98,10 @@ print('total terms: %d' % (total_terms))
 print('average standard deviation of scores for each sentence: %f' % (numpy.average(stds)))
 
 plt.hist(Y_sentence)
-plt.title("Gaussian Histogram")
-plt.xlabel("Value")
-plt.ylabel("Frequency")
-# plt.show()
+plt.title("Sentence-Level Vagueness Score Distribution")
+plt.xlabel("Score")
+plt.ylabel("Number of Sentences")
+plt.show()
 
 sorted_vague_phrases = sorted(vague_phrases.items(), key=operator.itemgetter(1), reverse=True)
 with open(vague_phrases_file, 'w') as f:
