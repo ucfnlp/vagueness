@@ -1,23 +1,24 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import matplotlib.mlab as mlab
 import matplotlib.pyplot as plt
-import json
 import yaml
 import numpy
-import theano
 import codecs
 import operator
 import h5py
 import gensim
 from gensim.models.word2vec import Word2Vec
 from numpy import nan_to_num
-import operator
 
 numpy.random.seed(123)
 from keras.preprocessing.text import Tokenizer
 from keras.preprocessing.sequence import pad_sequences
+
+#if using theano, then comment the next line and uncomment the following 2 lines
+float_type = numpy.float32        
+# import theano
+# float_type = theano.config.floatX
 
 train_file = '../data/Privacy_Sentences.txt'
 word_id_file = '../data/train.h5'
@@ -38,6 +39,18 @@ val_samples = batch_size * 10
 train_ratio = 0.8
 vague_phrase_threshold = 2
 
+'''
+Parameters
+----------------
+sentence: string
+vague_phrases: dict, representing the counts of each vague phrase in the sentence
+
+Output
+----------------
+labels: list of integers (0 or 1), one element for each word in the sentence
+    0 = not a vague word
+    1 = vague word
+'''
 def labelVagueWords(sentence, vague_phrases):
     labels = [0] * len(sentence)
     for phrase, count in vague_phrases.iteritems():
@@ -52,6 +65,7 @@ def labelVagueWords(sentence, vague_phrases):
         raise ValueError('len labels does not equal len sentence')
     return labels
 
+# Reads in the JSON data
 with open(clean_data_json) as f:
     json_str = f.read()
 data = yaml.safe_load(json_str)
@@ -73,24 +87,31 @@ for doc in data['docs']:
     for sent in doc['vague_sentences']:
         words = sent['sentence_str'].strip().split() + end_tag
         sentences.append(' '.join(words))
+        
+        # Get the sentence-level scores
         scores = map(int, sent['scores'])
         Y_sentence.append(numpy.nan_to_num(numpy.average(scores)))
+        
+        # Get word-level vagueness
         word_labels = labelVagueWords(words, sent['vague_phrases'])
         Y_word.append(word_labels)
+        
+        # Store the document ID
         sentence_doc_ids.append(int(doc['id']))
         
+        # Calculate statistics
         total_terms += len(word_labels)
         num_vague_terms = sum(x == 1 for x in word_labels)
         total_vague_terms += num_vague_terms
         if num_vague_terms > 0: 
             total_vague_sents += 1
-        
         std = numpy.std(scores)
         stds.append(std)
-        
         for phrase, count in sent['vague_phrases'].iteritems():
             if count >= vague_phrase_threshold:
                 vague_phrases[phrase] = vague_phrases.get(phrase, 0) + 1
+                
+# Print statistics
 print('total vague sentences: %d' % (total_vague_sents))
 print('total number of sentences in train file: %d' % len(sentences))
 print('total vague terms: %d' % (total_vague_terms))
@@ -134,11 +155,9 @@ states = outfile.create_dataset('words', data=numpy.array(my_word_ids))
 outfile.flush()
 outfile.close()
 
-X = word_id_seqs
-
 # prepare embedding weights
 word2vec_model = Word2Vec.load_word2vec_format(embedding_file, binary=True)
-embedding_weights = numpy.zeros((vocab_size, embedding_dim), dtype=theano.config.floatX)
+embedding_weights = numpy.zeros((vocab_size, embedding_dim), dtype=float_type)
    
 n_words_in_word2vec = 0
 n_words_not_in_word2vec = 0
@@ -149,7 +168,7 @@ for word, idx in tokenizer.word_index.items():
             embedding_weights[idx,:] = word2vec_model[word]
             n_words_in_word2vec += 1
         except:
-            embedding_weights[idx,:] = 0.01 * numpy.random.randn(1, embedding_dim).astype(theano.config.floatX)
+            embedding_weights[idx,:] = 0.01 * numpy.random.randn(1, embedding_dim).astype(float_type)
             n_words_not_in_word2vec += 1
 print('%d words found in word2vec, %d are not' % (n_words_in_word2vec, n_words_not_in_word2vec))
 outfile = h5py.File(embedding_weights_file, 'w')
@@ -157,31 +176,14 @@ outfile.create_dataset('embedding_weights', data=embedding_weights)
 outfile.flush()
 outfile.close()
 
-        
-           
-
-
-
-
-
-# 
-# phrase_word_ids = []
-# for sent in vague_phrases:
-#     phrases = []
-#     for phrase, count in sent:
-#         if count >= vague_phrase_threshold:
-#             words = phrase.strip().split()
-#             word_ids = []
-#             for w in words: 
-#                 word_ids.append(tokenizer.word_index[w] if w in tokenizer.word_index else 0)
-             
-
-
+# Pad X and Y
+X = word_id_seqs
 X_padded = pad_sequences(X, maxlen=maxlen)
 Y_padded_word = pad_sequences(Y_word, maxlen=maxlen)
 Y_sentence = numpy.asarray(Y_sentence)
 Y_padded_word = Y_padded_word.reshape(Y_padded_word.shape[0], Y_padded_word.shape[1], 1)
 
+# shuffle Documents
 doc_ids = set()
 for doc in data['docs']:
     doc_ids.add(int(doc['id']))
@@ -191,6 +193,7 @@ train_len = int(train_ratio*len(doc_ids))
 train_doc_ids = doc_ids[:train_len]
 test_doc_ids = doc_ids[train_len:]
 
+# Split into train and test, keeping documents together
 train_indices = []
 test_indices = []
 for i in range(len(sentence_doc_ids)):
@@ -201,16 +204,16 @@ for i in range(len(sentence_doc_ids)):
         test_indices.append(i)
     else:
         raise ValueError('Document id was not in either the train set nor the test set')
-        
-
 train_X = X_padded[train_indices]
 train_Y_word = Y_padded_word[train_indices]
 train_Y_sentence = Y_sentence[train_indices]
 test_X = X_padded[test_indices]
+        
 test_Y_word = Y_padded_word[test_indices]
 test_Y_sentence = Y_sentence[test_indices]
 
 #shuffle
+        
 permutation = numpy.random.permutation(train_X.shape[0])
 train_X = train_X[permutation]
 train_Y_word = train_Y_word[permutation]
@@ -220,7 +223,7 @@ test_X = test_X[permutation]
 test_Y_word = test_Y_word[permutation]
 test_Y_sentence = test_Y_sentence[permutation]
 
-
+# Save preprocessed dataset to file
 outfile = h5py.File(dataset_file, 'w')
 outfile.create_dataset('train_X', data=train_X)
 outfile.create_dataset('train_Y_word', data=train_Y_word)
@@ -232,7 +235,6 @@ outfile.flush()
 outfile.close()
 
 print('done')
-
 
 
 

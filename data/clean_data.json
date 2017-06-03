@@ -1040,10 +1040,10 @@
                     "type": "Sentence", 
                     "vague_phrases": {
                         "may": 1, 
-                        "may not": 1, 
                         "necessarily": 2, 
                         "interception": 3, 
-                        "secure": 1
+                        "secure": 1, 
+                        "may not": 1
                     }, 
                     "sentence_str": "Remember that email may not necessarily be secure against interception ."
                 }, 
@@ -5738,9 +5738,9 @@
                         "create": 1, 
                         "register": 2, 
                         "commercial": 1, 
-                        "contact preferences": 2, 
-                        "may collect": 1, 
                         "we may": 1, 
+                        "may collect": 1, 
+                        "contact preferences": 2, 
                         "collect": 1, 
                         "products": 1, 
                         "online": 1, 
