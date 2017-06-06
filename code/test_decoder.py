@@ -16,12 +16,14 @@ VOCAB_SIZE = 1000
 PATIENCE = 2000
 np.random.seed(123)
 
-# Each input instance is a sequence of ints. 
+# Each input is a latent vector of size LATENT_SIZE
 x = np.random.randint(VOCAB_SIZE, size=(NUM_TRAIN+NUM_TEST, LATENT_SIZE))
-# Each target is the sequence in reverse.
+# Each target is a sequence based on the latent vector
 y = np.zeros((NUM_TRAIN+NUM_TEST, SEQUENCE_LEN))
 # sum of each row
 row_sum = np.sum(x, axis=1)
+# To calculate the y at time t, take the sum of the latent vector,
+# then divide by x[t], then add y[t-1]
 for r in range(len(y)):
     for c in range(len(y[r])):
         temp = row_sum[r] / x[r,c%LATENT_SIZE]
@@ -44,10 +46,6 @@ x_ = tf.placeholder(tf.float32, [None, data.shape[1]])
 y_ = [tf.placeholder(tf.float32, [None, 1]) for _ in xrange(target.shape[1])]
 
 cell = BasicRNNCell(num_units=data.shape[1])
-
-# def loop_function(prev, _):
-#     next = prev
-#     return next
 
 # outputs, states = tf.contrib.rnn.static_rnn(cell, [x_], dtype=tf.float32)
 outputs, states = rnn_decoder(y_, x_, cell)
