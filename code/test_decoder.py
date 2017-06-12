@@ -68,7 +68,7 @@ with tf.variable_scope("foo"):
                               feed_previous=False,
                               update_embedding_for_previous=True)
     tf.get_variable_scope().reuse_variables()
-    outputs_fed_truth, states_fed_truth = embedding_rnn_decoder(y_,
+    outputs_fed_previous, states_fed_previous = embedding_rnn_decoder(y_,
                               x_,
                               cell,
                               VOCAB_SIZE,
@@ -92,7 +92,7 @@ def calcCost(y_, outputs):
     return cost, y
 
 cost, y = calcCost(y_, outputs)
-cost_fed_truth, y_fed_truth = calcCost(y_, outputs_fed_truth)
+cost_fed_previous, y_fed_previous = calcCost(y_, outputs_fed_previous)
 # test_cost = calcCost(y, test_outputs)
 train_op = tf.train.RMSPropOptimizer(0.005, 0.2).minimize(cost)
 
@@ -112,7 +112,7 @@ with tf.Session() as sess:
         # print loss
         if i % PRINT_STEP == 0:
             train_cost = sess.run(cost, feed_dict=train_dict)
-            test_cost = sess.run(cost_fed_truth, feed_dict=test_dict)
+            test_cost = sess.run(cost_fed_previous, feed_dict=test_dict)
             print('training cost:', train_cost, 'test cost:', test_cost)
         if test_cost < min_test_cost:
             num_mistakes = 0
@@ -122,7 +122,7 @@ with tf.Session() as sess:
         if num_mistakes >= PATIENCE:
             break
     # test on test set
-    response = sess.run(y_fed_truth, feed_dict=test_dict)
+    response = sess.run(y_fed_previous, feed_dict=test_dict)
     response = np.array(response)
     response = np.transpose(response)
     
