@@ -6,6 +6,7 @@ encoding//code/gru_sentence.py=utf-8
 encoding//code/json_to_dataset.py=utf-8
 encoding//code/keras_seq2seq.py=utf-8
 encoding//code/logit.py=utf-8
+encoding//code/metrics.py=utf-8
 encoding//code/nn.py=utf-8
 encoding//code/predict.py=utf-8
 encoding//code/test.py=utf-8
