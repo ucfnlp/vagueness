@@ -1,5 +1,7 @@
 import numpy as np
 import tensorflow as tf
+from keras import backend as K
+from keras.layers import Dense
 from seq2seq import basic_rnn_seq2seq, rnn_decoder, embedding_rnn_decoder, sequence_loss
 from tensorflow.contrib.rnn import BasicRNNCell, BasicLSTMCell, GRUCell
 from metrics import performance
@@ -9,16 +11,18 @@ y_file = 'y.txt'
 summary_file = '/home/logan/tmp'
 
 EPOCHS = 5000
-PRINT_STEP = 1
+PRINT_STEP = 10
 NUM_TRAIN = 10000
 NUM_TEST = 1000
-LATENT_SIZE = 5
-SEQUENCE_LEN = 5
-VOCAB_SIZE = 10
+LATENT_SIZE = 200
+SEQUENCE_LEN = 20
+VOCAB_SIZE = 100
 EMBEDDING_SIZE = 50
-PATIENCE = 20
+PATIENCE = 200
+BATCH_SIZE = 128
 cell_type = 1
 np.random.seed(123)
+
 
 if cell_type == 2:
     len_x = LATENT_SIZE/2
@@ -26,6 +30,9 @@ else:
     len_x = LATENT_SIZE
 # Each input is a latent vector of size LATENT_SIZE
 x = np.random.randint(1, VOCAB_SIZE, size=(NUM_TRAIN+NUM_TEST, len_x))
+for i in range(len(x)):
+    for j in range(1,len(x[i])):
+        x[i][j] = (x[i][j-1] + (VOCAB_SIZE/10+1)) % VOCAB_SIZE
 # Each target is a sequence based on the latent vector
 y = np.zeros((NUM_TRAIN+NUM_TEST, SEQUENCE_LEN))
 # sum of each row
@@ -54,6 +61,11 @@ train_y_shifted = y_shifted[:NUM_TRAIN]
 test_x = x[NUM_TRAIN:]
 test_y = y[NUM_TRAIN:]
 test_y_shifted = y_shifted[NUM_TRAIN:]
+
+def batch_generator(x,y,y_shifted):
+    for i in range(len(x)):
+        yield x[i:min(i+BATCH_SIZE,len(x))], y[i:min(i+BATCH_SIZE,len(x))], y_shifted[i:min(i+BATCH_SIZE,len(x))]
+    yield None, None, None
 
 data = train_x
 target = train_y
@@ -123,11 +135,11 @@ def calcCost(y_, outputs):
 
 cost, y = calcCost(y_, outputs)
 cost_fed_previous, y_fed_previous = calcCost(y_, outputs_fed_previous)
-# test_cost = calcCost(y, test_outputs)
 train_op = tf.train.RMSPropOptimizer(0.005, 0.2).minimize(cost)
 merged = tf.summary.merge_all()
 
 with tf.Session() as sess:
+    K.set_session(sess)
     train_writer = tf.summary.FileWriter(summary_file + '/train', sess.graph)
     tf.global_variables_initializer().run()
     train_dict = {i: d for i, d in zip(y_, np.transpose(target))}
@@ -144,12 +156,28 @@ with tf.Session() as sess:
         # train for 1 epoch
         sess.run(train_op, feed_dict=train_dict)
         
+#         batcher = batch_generator(train_x, train_y, train_y_shifted)
+#         batch_x, batch_y, batch_y_shifted = next(batcher)
+#         while batch_x != None:
+#             train_dict = {i: d for i, d in zip(y_, np.transpose(batch_y))}
+#             temp = {i: d for i, d in zip(inputs, np.transpose(batch_y_shifted))}
+#             train_dict.update(temp)
+#             train_dict[x_] = batch_x
+#             sess.run(train_op, feed_dict=train_dict)
+#             batch_x, batch_y, batch_y_shifted = next(batcher)
+        
         # print loss
         if i % PRINT_STEP == 0:
-            train_cost, summary = sess.run([cost, merged], feed_dict=train_dict)
+            train_cost, train_predictions, summary = sess.run([cost, y_fed_previous, merged], feed_dict=train_dict)
             train_writer.add_summary(summary, i)
-            test_cost = sess.run(cost_fed_previous, feed_dict=test_dict)
-            print('training cost:', train_cost, 'test cost:', test_cost)
+            test_cost, test_predictions = sess.run([cost_fed_previous, y_fed_previous], feed_dict=test_dict)
+            train_predictions = np.transpose(np.array(train_predictions))
+            train_accuracy,_,_,_ = performance(train_predictions, train_y)
+            test_predictions = np.transpose(np.array(test_predictions))
+            test_accuracy,_,_,_ = performance(test_predictions, test_y)
+            print('training cost:', train_cost, 'training accuracy:', train_accuracy)
+            print('test cost:', test_cost, 'training accuracy:', test_accuracy)
+            
         if test_cost < min_test_cost:
             num_mistakes = 0
             min_test_cost = test_cost

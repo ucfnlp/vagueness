@@ -1,6 +1,7 @@
 eclipse.preferences.version=1
 encoding//code/acgan.py=utf-8
 encoding//code/acgan_vague.py=utf-8
+encoding//code/gan.py=utf-8
 encoding//code/gru.py=utf-8
 encoding//code/gru_sentence.py=utf-8
 encoding//code/json_to_dataset.py=utf-8
