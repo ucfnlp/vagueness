@@ -2,6 +2,11 @@ import numpy as np
 import tensorflow as tf
 from seq2seq import basic_rnn_seq2seq
 from tensorflow.contrib.rnn import BasicRNNCell
+from keras import backend as K
+from keras.models import Sequential, Model, load_model
+from keras.layers import Dense, Dropout, Activation, merge, Input, TimeDistributed, Bidirectional
+from keras.layers import Embedding, LSTM, GRU, InputLayer
+from keras.engine.topology import Layer
 
 prediction_file = 'predictions.txt'
 y_file = 'y.txt'
@@ -13,6 +18,26 @@ NUM_TEST = 1000
 SEQUENCE_LEN = 20
 VOCAB_SIZE = 1000
 np.random.seed(123)
+
+class MyLayer(Layer):
+
+    def __init__(self, output_dim, **kwargs):
+        self.output_dim = output_dim
+        super(MyLayer, self).__init__(**kwargs)
+
+    def build(self, input_shape):
+        # Create a trainable weight variable for this layer.
+        self.kernel = self.add_weight(name='kernel', 
+                                      shape=(input_shape[1], self.output_dim),
+                                      initializer='uniform',
+                                      trainable=True)
+        super(MyLayer, self).build(input_shape)  # Be sure to call this somewhere!
+
+    def call(self, x):
+        return K.dot(x, self.kernel)
+
+    def compute_output_shape(self, input_shape):
+        return (input_shape[0], self.output_dim)
 
 # Each input instance is a sequence of ints. 
 train_x = np.random.randint(VOCAB_SIZE, size=(NUM_TRAIN, SEQUENCE_LEN))

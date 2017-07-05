@@ -1,316 +1,240 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-"""
-Train an Auxiliary Classifier Generative Adversarial Network (ACGAN) on the
-MNIST dataset. See https://arxiv.org/abs/1610.09585 for more details.
-
-You should start to see reasonable images after ~5 epochs, and good images
-by ~15 epochs. You should use a GPU, as the convolution-heavy operations are
-very slow on the CPU. Prefer the TensorFlow backend if you plan on iterating,
-as the compilation time can be a blocker using Theano.
-
-Timings:
-
-Hardware           | Backend | Time / Epoch
--------------------------------------------
- CPU               | TF      | 3 hrs
- Titan X (maxwell) | TF      | 4 min
- Titan X (maxwell) | TH      | 7 min
-
-Consult https://github.com/lukedeo/keras-acgan for more information and
-example output
-"""
-from __future__ import print_function
-
-from collections import defaultdict
-try:
-    import cPickle as pickle
-except ImportError:
-    import pickle
-from PIL import Image
-
-from six.moves import range
-
-import tensorflow as tf
-import keras.backend as K
-from keras.datasets import mnist
-from keras import layers
-from keras.layers import Input, Dense, Reshape, Flatten, Embedding, Dropout
-from keras.layers.advanced_activations import LeakyReLU
-from keras.layers.convolutional import UpSampling2D, Conv2D
-from keras.models import Sequential, Model
-from keras.optimizers import Adam
-from keras.utils.generic_utils import Progbar
 import numpy as np
-
-np.random.seed(1337)
-
-K.set_image_data_format('channels_first')
-
-
-def build_generator(latent_size):
-    # we will map a pair of (z, L), where z is a latent vector and L is a
-    # label drawn from P_c, to image space (..., 1, 28, 28)
-    cnn = Sequential()
-
-    cnn.add(Dense(1024, input_dim=latent_size, activation='relu'))
-    cnn.add(Dense(128 * 7 * 7, activation='relu'))
-    cnn.add(Reshape((128, 7, 7)))
-
-    # upsample to (..., 14, 14)
-    cnn.add(UpSampling2D(size=(2, 2)))
-    cnn.add(Conv2D(256, 5, padding='same',
-                   activation='relu',
-                   kernel_initializer='glorot_normal'))
-
-    # upsample to (..., 28, 28)
-    cnn.add(UpSampling2D(size=(2, 2)))
-    cnn.add(Conv2D(128, 5, padding='same',
-                   activation='relu',
-                   kernel_initializer='glorot_normal'))
-
-    # take a channel axis reduction
-    cnn.add(Conv2D(1, 2, padding='same',
-                   activation='tanh',
-                   kernel_initializer='glorot_normal'))
-
-    # this is the z space commonly refered to in GAN papers
-    latent = Input(shape=(latent_size, ))
-
-    # this will be our label
-    image_class = Input(shape=(1,), dtype='int32')
-
-    # 10 classes in MNIST
-    cls = Flatten()(Embedding(10, latent_size,
-                              embeddings_initializer='glorot_normal')(image_class))
-
-    # hadamard product between z-space and a class conditional embedding
-    h = layers.multiply([latent, cls])
-
-    fake_image = cnn(h)
-
-    return Model([latent, image_class], fake_image)
-
-
-def build_discriminator():
-    # build a relatively standard conv net, with LeakyReLUs as suggested in
-    # the reference paper
-    cnn = Sequential()
-
-    cnn.add(Conv2D(32, 3, padding='same', strides=2,
-                   input_shape=(1, 28, 28)))
-    cnn.add(LeakyReLU())
-    cnn.add(Dropout(0.3))
-
-    cnn.add(Conv2D(64, 3, padding='same', strides=1))
-    cnn.add(LeakyReLU())
-    cnn.add(Dropout(0.3))
-
-    cnn.add(Conv2D(128, 3, padding='same', strides=2))
-    cnn.add(LeakyReLU())
-    cnn.add(Dropout(0.3))
-
-    cnn.add(Conv2D(256, 3, padding='same', strides=1))
-    cnn.add(LeakyReLU())
-    cnn.add(Dropout(0.3))
-
-    cnn.add(Flatten())
-
-    image = Input(shape=(1, 28, 28))
-
-    features = cnn(image)
-
-    # first output (name=generation) is whether or not the discriminator
-    # thinks the image that is being shown is fake, and the second output
-    # (name=auxiliary) is the class that the discriminator thinks the image
-    # belongs to.
-    fake = Dense(1, activation='sigmoid', name='generation')(features)
-    aux = Dense(10, activation='softmax', name='auxiliary')(features)
-
-    return Model(image, [fake, aux])
-
-if __name__ == '__main__':
-
-    # batch and latent size taken from the paper
-    epochs = 50
-    batch_size = 100
-    latent_size = 100
-
-    # Adam parameters suggested in https://arxiv.org/abs/1511.06434
-    adam_lr = 0.0002
-    adam_beta_1 = 0.5
-
-    # build the discriminator
-    discriminator = build_discriminator()
-    discriminator.compile(
-        optimizer=Adam(lr=adam_lr, beta_1=adam_beta_1),
-        loss=['binary_crossentropy', 'sparse_categorical_crossentropy']
-    )
-
-    # build the generator
-    generator = build_generator(latent_size)
-    generator.compile(optimizer=Adam(lr=adam_lr, beta_1=adam_beta_1),
-                      loss='binary_crossentropy')
-
-    latent = Input(shape=(latent_size, ))
-    image_class = Input(shape=(1,), dtype='int32')
-
-    # get a fake image
-    fake = generator([latent, image_class])
-
-    # we only want to be able to train generation for the combined model
-    discriminator.trainable = False
-    fake, aux = discriminator(fake)
-    combined = Model([latent, image_class], [fake, aux])
-
-    combined.compile(
-        optimizer=Adam(lr=adam_lr, beta_1=adam_beta_1),
-        loss=['binary_crossentropy', 'sparse_categorical_crossentropy']
-    )
-
-    # get our mnist data, and force it to be of shape (..., 1, 28, 28) with
-    # range [-1, 1]
-    (X_train, y_train), (X_test, y_test) = mnist.load_data()
-    X_train = (X_train.astype(np.float32) - 127.5) / 127.5
-    X_train = np.expand_dims(X_train, axis=1)
-
-    X_test = (X_test.astype(np.float32) - 127.5) / 127.5
-    X_test = np.expand_dims(X_test, axis=1)
-
-    num_train, num_test = X_train.shape[0], X_test.shape[0]
-
-    train_history = defaultdict(list)
-    test_history = defaultdict(list)
-
-    for epoch in range(epochs):
-        print('Epoch {} of {}'.format(epoch + 1, epochs))
-
-        num_batches = int(X_train.shape[0] / batch_size)
-        progress_bar = Progbar(target=num_batches)
-
-        epoch_gen_loss = []
-        epoch_disc_loss = []
-
-        for index in range(num_batches):
-            progress_bar.update(index)
-            # generate a new batch of noise
-            noise = np.random.uniform(-1, 1, (batch_size, latent_size))
-
-            # get a batch of real images
-            image_batch = X_train[index * batch_size:(index + 1) * batch_size]
-            label_batch = y_train[index * batch_size:(index + 1) * batch_size]
-
-            # sample some labels from p_c
-            sampled_labels = np.random.randint(0, 10, batch_size)
-
-            # generate a batch of fake images, using the generated labels as a
-            # conditioner. We reshape the sampled labels to be
-            # (batch_size, 1) so that we can feed them into the embedding
-            # layer as a length one sequence
-            generated_images = generator.predict(
-                [noise, sampled_labels.reshape((-1, 1))], verbose=0)
-
-            X = np.concatenate((image_batch, generated_images))
-            y = np.array([1] * batch_size + [0] * batch_size)
-            aux_y = np.concatenate((label_batch, sampled_labels), axis=0)
-
-            # see if the discriminator can figure itself out...
-            epoch_disc_loss.append(discriminator.train_on_batch(X, [y, aux_y]))
-
-            # make new noise. we generate 2 * batch size here such that we have
-            # the generator optimize over an identical number of images as the
-            # discriminator
-            noise = np.random.uniform(-1, 1, (2 * batch_size, latent_size))
-            sampled_labels = np.random.randint(0, 10, 2 * batch_size)
-
-            # we want to train the generator to trick the discriminator
-            # For the generator, we want all the {fake, not-fake} labels to say
-            # not-fake
-            trick = np.ones(2 * batch_size)
-
-            epoch_gen_loss.append(combined.train_on_batch(
-                [noise, sampled_labels.reshape((-1, 1))],
-                [trick, sampled_labels]))
-
-        print('\nTesting for epoch {}:'.format(epoch + 1))
-
-        # evaluate the testing loss here
-
-        # generate a new batch of noise
-        noise = np.random.uniform(-1, 1, (num_test, latent_size))
-
-        # sample some labels from p_c and generate images from them
-        sampled_labels = np.random.randint(0, 10, num_test)
-        generated_images = generator.predict(
-            [noise, sampled_labels.reshape((-1, 1))], verbose=False)
-
-        X = np.concatenate((X_test, generated_images))
-        y = np.array([1] * num_test + [0] * num_test)
-        aux_y = np.concatenate((y_test, sampled_labels), axis=0)
-
-        # see if the discriminator can figure itself out...
-        discriminator_test_loss = discriminator.evaluate(
-            X, [y, aux_y], verbose=False)
-
-        discriminator_train_loss = np.mean(np.array(epoch_disc_loss), axis=0)
-
-        # make new noise
-        noise = np.random.uniform(-1, 1, (2 * num_test, latent_size))
-        sampled_labels = np.random.randint(0, 10, 2 * num_test)
-
-        trick = np.ones(2 * num_test)
-
-        generator_test_loss = combined.evaluate(
-            [noise, sampled_labels.reshape((-1, 1))],
-            [trick, sampled_labels], verbose=False)
-
-        generator_train_loss = np.mean(np.array(epoch_gen_loss), axis=0)
-
-        # generate an epoch report on performance
-        train_history['generator'].append(generator_train_loss)
-        train_history['discriminator'].append(discriminator_train_loss)
-
-        test_history['generator'].append(generator_test_loss)
-        test_history['discriminator'].append(discriminator_test_loss)
-
-        print('{0:<22s} | {1:4s} | {2:15s} | {3:5s}'.format(
-            'component', *discriminator.metrics_names))
-        print('-' * 65)
-
-        ROW_FMT = '{0:<22s} | {1:<4.2f} | {2:<15.2f} | {3:<5.2f}'
-        print(ROW_FMT.format('generator (train)',
-                             *train_history['generator'][-1]))
-        print(ROW_FMT.format('generator (test)',
-                             *test_history['generator'][-1]))
-        print(ROW_FMT.format('discriminator (train)',
-                             *train_history['discriminator'][-1]))
-        print(ROW_FMT.format('discriminator (test)',
-                             *test_history['discriminator'][-1]))
-
-        # save weights every epoch
-        generator.save_weights(
-            'params_generator_epoch_{0:03d}.hdf5'.format(epoch), True)
-        discriminator.save_weights(
-            'params_discriminator_epoch_{0:03d}.hdf5'.format(epoch), True)
-
-        # generate some digits to display
-        noise = np.random.uniform(-1, 1, (100, latent_size))
-
-        sampled_labels = np.array([
-            [i] * 10 for i in range(10)
-        ]).reshape(-1, 1)
-
-        # get a batch to display
-        generated_images = generator.predict(
-            [noise, sampled_labels], verbose=0)
-
-        # arrange them into a grid
-        img = (np.concatenate([r.reshape(-1, 28)
-                               for r in np.split(generated_images, 10)
-                               ], axis=-1) * 127.5 + 127.5).astype(np.uint8)
-
-        Image.fromarray(img).save(
-            'plot_epoch_{0:03d}_generated.png'.format(epoch))
-
-    pickle.dump({'train': train_history, 'test': test_history},
-                open('acgan-history.pkl', 'wb'))
+import tensorflow as tf
+from seq2seq import basic_rnn_seq2seq, rnn_decoder, embedding_rnn_decoder, sequence_loss
+from tensorflow.contrib.rnn import BasicRNNCell, BasicLSTMCell, GRUCell
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+import os
+from metrics import performance
+import time
+
+prediction_file = 'predictions.txt'
+y_file = 'y.txt'
+summary_file = '/home/logan/tmp'
+
+EPOCHS = 2000
+PRINT_STEP = 10
+NUM_TRAIN = 10000
+NUM_TEST = 1000
+LATENT_SIZE = 200
+SEQUENCE_LEN = 20
+VOCAB_SIZE = 100
+EMBEDDING_SIZE = 50
+PATIENCE = 200
+BATCH_SIZE = 128
+cell_type = 1
+np.random.seed(123)
+
+start_time = time.time()
+
+if cell_type == 2:
+    len_x = LATENT_SIZE/2
+else:
+    len_x = LATENT_SIZE
+# Each input is a latent vector of size LATENT_SIZE
+x = np.random.randint(1, VOCAB_SIZE, size=(NUM_TRAIN+NUM_TEST, len_x))
+for i in range(len(x)):
+    for j in range(1,len(x[i])):
+        x[i][j] = (x[i][j-1] + (VOCAB_SIZE/10+1)) % VOCAB_SIZE
+# Each target is a sequence based on the latent vector
+y = np.zeros((NUM_TRAIN+NUM_TEST, SEQUENCE_LEN))
+for r in range(len(y)):
+    for c in range(len(y[r])):
+        y[r,c] = x[r, c % x.shape[1]]
+y_one_hot = np.transpose(y)
+y_one_hot = np.eye(VOCAB_SIZE)[y_one_hot.astype(int)]
+
+y_shifted = np.roll(y, 1)
+y_shifted[:,0] = 0
+    
+train_x = x[:NUM_TRAIN]
+train_y = y[:NUM_TRAIN]
+train_y_shifted = y_shifted[:NUM_TRAIN]
+train_y_one_hot = y_one_hot[:NUM_TRAIN]
+
+test_x = x[NUM_TRAIN:]
+test_y = y[NUM_TRAIN:]
+test_y_shifted = y_shifted[NUM_TRAIN:]
+test_y_one_hot = y_one_hot[NUM_TRAIN:]
+
+def batch_generator(x,y,y_shifted):
+    for i in range(len(x)):
+        yield x[i:min(i+BATCH_SIZE,len(x))], y[i:min(i+BATCH_SIZE,len(x))], y_shifted[i:min(i+BATCH_SIZE,len(x))]
+    yield None, None, None
+
+data = train_x
+target = train_y
+
+def variable_summaries(var):
+  """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
+  with tf.name_scope('summaries'):
+    mean = tf.reduce_mean(var)
+    tf.summary.scalar('mean', mean)
+    with tf.name_scope('stddev'):
+      stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+    tf.summary.scalar('stddev', stddev)
+    tf.summary.scalar('max', tf.reduce_max(var))
+    tf.summary.scalar('min', tf.reduce_min(var))
+    tf.summary.histogram('histogram', var)
+
+X = [tf.placeholder(tf.float32, shape=[None, VOCAB_SIZE]) for i in xrange(SEQUENCE_LEN)]
+z = tf.placeholder(tf.float32, [None, data.shape[1]], name='z')
+c_init = tf.fill(tf.shape(z), 0.0)
+y_ = [tf.placeholder(tf.int64, [None,], name='y_' + str(i)) for i in xrange(target.shape[1])]
+# inputs = [tf.placeholder(tf.int64, [None,], name='input_' + str(i)) for i in xrange(target.shape[1])]
+inputs = [tf.fill(tf.shape(y_[0]), 0) for i in xrange(SEQUENCE_LEN)]
+weights = [tf.fill(tf.shape(y_[0]), 1.0) for i in xrange(target.shape[1])]
+
+
+def sample_Z(m, n):
+    return np.random.uniform(-1., 1., size=[m, n])
+
+
+def generator(z):
+    with tf.variable_scope("G_"):
+        if cell_type == 2:
+            cell = BasicLSTMCell(num_units=data.shape[1], activation=tf.nn.tanh, state_is_tuple=False)
+        elif cell_type == 0:
+            cell = BasicRNNCell(num_units=data.shape[1], activation=tf.nn.tanh)
+        elif cell_type == 1:
+            cell = GRUCell(num_units=data.shape[1], activation=tf.nn.tanh)
+        
+        W = tf.Variable(tf.random_normal([LATENT_SIZE, VOCAB_SIZE]), name='W')    
+        b = tf.Variable(tf.random_normal([VOCAB_SIZE]), name='b')    
+        variable_summaries(W) 
+        variable_summaries(b)
+        
+        outputs, states = embedding_rnn_decoder(inputs,
+                                  z,
+                                  cell,
+                                  VOCAB_SIZE,
+                                  EMBEDDING_SIZE,
+                                  output_projection=(W,b),
+                                  feed_previous=True,
+                                  update_embedding_for_previous=True)
+        logits = [tf.matmul(output, W) + b for output in outputs]
+        x = [tf.nn.softmax(logit) for logit in logits] # is this softmaxing over the right dimension? this turns into 3D
+        return x
+
+
+def discriminator(x):
+    with tf.variable_scope("D_"):
+        embeddings = tf.get_variable('embeddings_W', [VOCAB_SIZE, EMBEDDING_SIZE], dtype=tf.float32,
+                                    initializer=tf.random_normal_initializer())
+#         embeddings = tf.Variable(
+#             tf.random_uniform([VOCAB_SIZE, EMBEDDING_SIZE], -1.0, 1.0), name='embeddings_W')
+        b1 = tf.get_variable('embeddings_b', [EMBEDDING_SIZE], dtype=tf.float32, 
+                             initializer=tf.zeros_initializer())
+        
+        embed = [tf.nn.tanh(tf.matmul(_x, embeddings) + b1) for _x in x]
+        
+#         initial_state = cell.zero_state(batch_size, data_type())
+        if cell_type == 2:
+            cell = BasicLSTMCell(num_units=data.shape[1], activation=tf.nn.tanh, state_is_tuple=False)
+        elif cell_type == 0:
+            cell = BasicRNNCell(num_units=data.shape[1], activation=tf.nn.tanh)
+        elif cell_type == 1:
+            cell = GRUCell(num_units=data.shape[1], activation=tf.nn.tanh)
+        outputs, state = tf.contrib.rnn.static_rnn(
+            cell, embed, dtype=tf.float32)
+        
+        logit = tf.layers.dense(outputs[-1], 1)
+#         W2 = tf.get_variable('W', [LATENT_SIZE, 1], initializer=tf.random_normal_initializer()) 
+#         b2 = tf.get_variable('b', [1], initializer=tf.zeros_initializer())
+#         logit = tf.matmul(outputs[-1], W2) + b2
+        prob = tf.nn.sigmoid(logit)
+    
+        return prob, logit
+
+    
+# train_op = tf.train.RMSPropOptimizer(0.005, 0.2).minimize(cost)
+    
+with tf.variable_scope(tf.get_variable_scope()) as scope:
+    G_sample = generator(z)
+    D_real, D_logit_real = discriminator(X)
+    tf.get_variable_scope().reuse_variables()
+    D_fake, D_logit_fake = discriminator(G_sample)
+
+    D_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_real, labels=tf.ones_like(D_logit_real)))
+    D_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_fake, labels=tf.zeros_like(D_logit_fake)))
+    D_loss = D_loss_real + D_loss_fake
+    G_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_fake, labels=tf.ones_like(D_logit_fake)))
+
+theta_D = [var for var in tf.trainable_variables() if 'D_' in var.name]
+theta_G = [var for var in tf.trainable_variables() if 'G_' in var.name]
+D_solver = tf.train.AdamOptimizer().minimize(D_loss, var_list=theta_D)
+G_solver = tf.train.AdamOptimizer().minimize(G_loss, var_list=theta_G)
+for var in theta_D:
+    print var
+for var in theta_G:
+    print var
+    
+    
+merged = tf.summary.merge_all()
+
+if not os.path.exists('out/'):
+    os.makedirs('out/')
+
+with tf.Session() as sess:
+    train_writer = tf.summary.FileWriter(summary_file + '/train', sess.graph)
+    tf.global_variables_initializer().run()
+    train_dict = {i: d for i, d in zip(X, train_y_one_hot)}
+    temp = {i: d for i, d in zip(y_, np.transpose(train_y))}
+    train_dict.update(temp)
+    train_dict[z] = sample_Z(NUM_TRAIN, LATENT_SIZE)
+    test_dict = {i: d for i, d in zip(X, test_y_one_hot)}
+    temp = {i: d for i, d in zip(y_, np.transpose(test_y))}
+    test_dict.update(temp)
+    test_dict[z] = sample_Z(NUM_TRAIN, LATENT_SIZE)
+    min_test_cost = np.inf
+    num_mistakes = 0
+    
+    xaxis = 0
+
+    for i in range(EPOCHS):
+        # train for 1 epoch
+        
+        
+    
+        _, D_loss_curr = sess.run([D_solver, D_loss], feed_dict=train_dict)
+        for j in range(3):
+            sample, _, G_loss_curr = sess.run([G_sample, G_solver, G_loss], feed_dict=train_dict)
+    
+        if i % 1 == 0:
+            generated_sequences = np.transpose(np.argmax(sample, axis=-1))
+            print('Iter: {}'.format(i))
+            print('D loss: {:.4}'. format(D_loss_curr))
+            print('G_loss: {:.4}'.format(G_loss_curr))
+            print('Samples', generated_sequences)
+            print()
+        
+    train_writer.close()
+        
+    with open(prediction_file, 'w') as f:
+        np.savetxt(f, generated_sequences, fmt='%d\t')
+        
+#     # test on train set
+#     response = sess.run(y_fed_previous, feed_dict=train_dict)
+#     response = np.array(response)
+#     response = np.transpose(response)
+#     acc,_,_,_ = performance(response, train_y)
+#     print('Train accuracy: ', acc)
+#     
+#     # test on test set
+#     response = sess.run(y_fed_previous, feed_dict=test_dict)
+#     response = np.array(response)
+#     response = np.transpose(response)
+#     acc,_,_,_ = performance(response, test_y)
+#     print('Test accuracy: ', acc)
+#     #print to files
+#     with open(prediction_file, 'w') as f:
+#         np.savetxt(f, response, fmt='%d\t')
+#     with open(y_file, 'w') as f:
+#         np.savetxt(f, test_y, fmt='%d\t')
+print('done')
+print('Execution time: ', time.time() - start_time)
+    
+    
+    
+    
+    
