@@ -9,5 +9,7 @@ encoding//code/logit.py=utf-8
 encoding//code/metrics.py=utf-8
 encoding//code/nn.py=utf-8
 encoding//code/predict.py=utf-8
+encoding//code/predict_sentence.py=utf-8
 encoding//code/test.py=utf-8
 encoding//code/test_seq2seq.py=utf-8
+encoding//code/turk_csv_to_json.py=utf-8
