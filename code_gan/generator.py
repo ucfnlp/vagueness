@@ -26,3 +26,4 @@ def generator(z, zero_inputs):
         logits = [tf.matmul(output, W) + b for output in outputs]
         x = [tf.nn.softmax(logit) for logit in logits] # is this softmaxing over the right dimension? this turns into 3D
         return x
+#     tf.nn.rnn_cell.EmbeddingWrapper
