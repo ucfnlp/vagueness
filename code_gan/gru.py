@@ -19,7 +19,8 @@ from keras.regularizers import l2
 from keras import metrics
 from keras.callbacks import EarlyStopping
 
-model_file = '../models/tf_model.h5'
+model_file = '../models/tf_lm_model'
+variables_file = '../models/tf_lm_variables.npz'
 dataset_file = '../data/dataset.h5'
 embedding_weights_file = '../data/embedding_weights.h5'
 dictionary_file = '../data/words.dict'
@@ -31,6 +32,7 @@ hidden_dim = 512
 batch_size = 128
 nb_epoch = 20
 samples_per_epoch = None
+fast = False
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_integer('EPOCHS', 5000,
@@ -53,7 +55,7 @@ parser.add_argument("--fast", help="run in fast mode for testing",
                     action="store_true")
 args = parser.parse_args()
  
-if args.fast:
+if args.fast or fast:
     nb_epoch = 1
     
 print('loading embedding weights')
@@ -74,7 +76,7 @@ with h5py.File(dataset_file, 'r') as data_file:
     test_X = data_file['test_X'][:]
     test_Y = data_file['test_Y'][:]
 
-if args.fast:
+if args.fast or fast:
     howmany = 259
     train_X = train_X[:howmany]
     train_Y = train_Y[:howmany]
@@ -126,6 +128,7 @@ loss = tf.contrib.seq2seq.sequence_loss(
     )
 cost = tf.reduce_sum(loss)
 tvars = tf.trainable_variables()
+tvar_names = [var.name for var in tvars]
 # TODO: change to rms optimizer
 optimizer = tf.train.AdamOptimizer().minimize(cost, var_list=tvars)
 predictions = tf.cast(tf.argmax(logits, axis=2, name='predictions'), tf.int32)
@@ -185,8 +188,10 @@ with tf.Session() as sess:
             print('Accuracy ', batch_accuracy)
             
     print 'saving model to file:'
-    saver.save(sess, 'gru-model')
-    saver2.save(sess, 'embed')
+    saver.save(sess, model_file)
+    vars = sess.run(tvars)
+    variables = dict(zip(tvar_names, vars))
+    numpy.savez(variables_file, **variables)
         
 
 print('done')

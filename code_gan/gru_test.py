@@ -19,7 +19,8 @@ from keras.regularizers import l2
 from keras import metrics
 from keras.callbacks import EarlyStopping
 
-model_file = '../models/tf_model.h5'
+model_file = '../models/tf_lm_model'
+variables_file = '../models/tf_lm_variables.npz'
 dataset_file = '../data/dataset.h5'
 embedding_weights_file = '../data/embedding_weights.h5'
 dictionary_file = '../data/words.dict'
@@ -55,6 +56,9 @@ args = parser.parse_args()
  
 if args.fast:
     nb_epoch = 1
+    
+print('loading model parameters')
+params = numpy.load(variables_file)
     
 print('loading embedding weights')
 with h5py.File(embedding_weights_file, 'r') as hf:
@@ -137,6 +141,8 @@ loss = tf.contrib.seq2seq.sequence_loss(
     )
 cost = tf.reduce_sum(loss)
 tvars = tf.trainable_variables()
+for var in tvars:
+    var.assign(params[var.name])
 # TODO: change to rms optimizer
 optimizer = tf.train.AdamOptimizer().minimize(cost, var_list=tvars)
 predictions = tf.cast(tf.argmax(logits, axis=2, name='predictions'), tf.int32)
@@ -157,8 +163,6 @@ def batch_generator(x, y):
 
 with tf.Session() as sess:
 #     train_writer = tf.summary.FileWriter(summary_file + '/train', sess.graph)
-    saver = tf.train.import_meta_graph('embed.meta')
-    saver.restore(sess,tf.train.latest_checkpoint('./'))
     tf.global_variables_initializer().run()
     for cur_epoch in range(nb_epoch):
         for batch_x, batch_y, cur, data_len in batch_generator(train_X, train_Y):

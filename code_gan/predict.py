@@ -10,10 +10,11 @@ numpy.random.seed(123)
 from metrics import performance
 
 predict_file = '../predictions/predictions.h5'
-model_file = '../models/tf_model.h5'
+model_file = '../models/tf_lm_model'
 dataset_file = '../data/dataset.h5'
 predict_words_file = '../predictions/tf_predictions_and_y_words.txt'
 dictionary_file = '../data/words.dict'
+
  
 batch_size = 128
 val_samples = batch_size
