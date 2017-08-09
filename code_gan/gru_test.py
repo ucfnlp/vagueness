@@ -141,8 +141,9 @@ loss = tf.contrib.seq2seq.sequence_loss(
     )
 cost = tf.reduce_sum(loss)
 tvars = tf.trainable_variables()
+assign_ops = []
 for var in tvars:
-    var.assign(params[var.name])
+    assign_ops.append(var.assign(params[var.name]))
 # TODO: change to rms optimizer
 optimizer = tf.train.AdamOptimizer().minimize(cost, var_list=tvars)
 predictions = tf.cast(tf.argmax(logits, axis=2, name='predictions'), tf.int32)
@@ -164,6 +165,7 @@ def batch_generator(x, y):
 with tf.Session() as sess:
 #     train_writer = tf.summary.FileWriter(summary_file + '/train', sess.graph)
     tf.global_variables_initializer().run()
+    sess.run(assign_ops)
     for cur_epoch in range(nb_epoch):
         for batch_x, batch_y, cur, data_len in batch_generator(train_X, train_Y):
             batch_cost, batch_accuracy, batch_logits, _ = sess.run([cost, accuracy, logits, optimizer], 
