@@ -1,20 +1,28 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from __future__ import print_function
 import numpy as np
 
 
 # computes accuracy and f1 scores
 def performance(predicted, truth, negative_label=0):
-    predicted_flat = predicted.flatten()
-    truth_flat = truth.flatten()
+    predicted_flat = predicted
+    truth_flat = truth
+#     predicted_flat = predicted.flatten()
+#     truth_flat = truth.flatten()
     assert(predicted_flat.shape == truth_flat.shape)
+    count = 0
+    it = np.nditer(truth_flat, flags=['multi_index'])
+    while not it.finished:
+        if it[0] == predicted_flat[it.multi_index]:
+            count += 1
+        it.iternext()
+    accuracy = count * 1.0 / np.size(truth_flat)
     TP = np.sum(predicted_flat[truth_flat == 1] == 1)
     FP = np.sum(predicted_flat[truth_flat == negative_label] == 1)
     TN = np.sum(predicted_flat[truth_flat == negative_label] == negative_label)
     FN = np.sum(predicted_flat[truth_flat == 1] == negative_label)
-    accuracy = 1.0 * np.sum(predicted_flat == truth_flat) / truth_flat.size
+#     accuracy = 1.0 * np.sum(predicted_flat == truth_flat) / truth_flat.size
     if TP + FP == 0:
         precision = 1.0
     else:

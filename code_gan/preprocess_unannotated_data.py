@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 import numpy
-import theano
 import codecs
 import operator
 import h5py
@@ -114,7 +113,7 @@ print('total terms: %d' % (total_terms))
            
 # prepare embedding weights
 word2vec_model = Word2Vec.load_word2vec_format(embedding_file, binary=True)
-embedding_weights = numpy.zeros((vocab_size, embedding_dim), dtype=theano.config.floatX)
+embedding_weights = numpy.zeros((vocab_size, embedding_dim), dtype='float32')
    
 n_words_in_word2vec = 0
 n_words_not_in_word2vec = 0
@@ -125,7 +124,7 @@ for word, idx in tokenizer.word_index.items():
             embedding_weights[idx,:] = word2vec_model[word]
             n_words_in_word2vec += 1
         except:
-            embedding_weights[idx,:] = 0.01 * numpy.random.randn(1, embedding_dim).astype(theano.config.floatX)
+            embedding_weights[idx,:] = 0.01 * numpy.random.randn(1, embedding_dim).astype('float32')
             n_words_not_in_word2vec += 1
 print('%d words found in word2vec, %d are not' % (n_words_in_word2vec, n_words_not_in_word2vec))
 outfile = h5py.File(embedding_weights_file, 'w')

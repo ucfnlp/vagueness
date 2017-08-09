@@ -1,6 +1,12 @@
 eclipse.preferences.version=1
 encoding//code_gan/gru.py=utf-8
+encoding//code_gan/gru_keras.py=utf-8
+encoding//code_gan/gru_test.py=utf-8
 encoding//code_gan/json_to_dataset.py=utf-8
+encoding//code_gan/metrics.py=utf-8
 encoding//code_gan/predict.py=utf-8
+encoding//code_gan/predict_keras.py=utf-8
 encoding//code_gan/preprocess_unannotated_data.py=utf-8
+encoding//code_gan/test.py=utf-8
+encoding//code_gru/gru.py=utf-8
 encoding//code_gru/predict.py=utf-8
