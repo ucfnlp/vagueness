@@ -32,10 +32,11 @@ train_ratio = 0.8
 
 # load file, one sentence per line
 sentences = []
+start_tag = ['<s>']
 end_tag = ['</s>']
 with codecs.open(train_file) as infile:
     for line in infile:
-        words = line.strip().split() + end_tag
+        words = start_tag + line.strip().split() + end_tag
         sentences.append(' '.join(words))
 print('total number of sentences in train file: %d' % len(sentences))
     

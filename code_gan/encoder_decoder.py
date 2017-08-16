@@ -1,0 +1,262 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+# from __future__ import print_function
+import numpy as np
+import tensorflow as tf
+import h5py
+from tensorflow.contrib.rnn import BasicRNNCell, BasicLSTMCell, GRUCell
+import utils
+import argparse
+
+np.random.seed(123)
+from keras.models import Sequential, Model, load_model
+from keras.layers import Dense, Dropout, Activation, merge, Input, TimeDistributed, Bidirectional
+from keras.layers import Embedding, LSTM, GRU, Flatten
+from keras.utils import np_utils
+from keras import backend as K
+from keras.regularizers import l2
+from keras import metrics
+from keras.callbacks import EarlyStopping
+
+model_file = '../models/tf_enc_dec_model'
+variables_file = '../models/tf_enc_dec_variables.npz'
+dataset_file = '../data/dataset.h5'
+embedding_weights_file = '../data/embedding_weights.h5'
+dictionary_file = '../data/words.dict'
+ckpt_dir = '../models/enc_dec_ckpts'
+fast = False
+
+FLAGS = tf.app.flags.FLAGS
+tf.app.flags.DEFINE_integer('EPOCHS', 20,
+                            'Num epochs.')
+tf.app.flags.DEFINE_integer('VOCAB_SIZE', 5000,
+                            'Number of words in the vocabulary.')
+tf.app.flags.DEFINE_integer('LATENT_SIZE', 512,
+                            'Size of both the hidden state of RNN and random vector z.')
+tf.app.flags.DEFINE_integer('SEQUENCE_LEN', 50,
+                            'Max length for each sentence.')
+tf.app.flags.DEFINE_integer('EMBEDDING_SIZE', 300,
+                            'Max length for each sentence.')
+tf.app.flags.DEFINE_integer('PATIENCE', 200,
+                            'Max length for each sentence.')
+tf.app.flags.DEFINE_integer('BATCH_SIZE', 128,
+                            'Max length for each sentence.')
+tf.app.flags.DEFINE_string('CELL_TYPE', 'GRU',
+                            'Which RNN cell for the RNNs.')
+
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--fast", help="run in fast mode for testing",
+                    action="store_true")
+parser.add_argument("--resume", help="resume from last saved epoch",
+                    action="store_true")
+args = parser.parse_args()
+ 
+if args.fast or fast:
+    FLAGS.EPOCHS = 4
+    
+print('loading embedding weights')
+with h5py.File(embedding_weights_file, 'r') as hf:
+    embedding_weights = hf['embedding_weights'][:]
+    
+print('loading dictionary')
+d = {}
+with open(dictionary_file) as f:
+    for line in f:
+       (val, key) = line.split()
+       d[int(key)] = val
+    
+print('loading training and test data')
+with h5py.File(dataset_file, 'r') as data_file:
+    train_X = data_file['train_X'][:]
+    train_Y = data_file['train_Y'][:]
+    test_X = data_file['test_X'][:]
+    test_Y = data_file['test_Y'][:]
+
+if args.fast or fast:
+    howmany = 259
+    train_X = train_X[:howmany]
+    train_Y = train_Y[:howmany]
+        
+# build model
+print('building model')
+# my_input = Input(shape=(FLAGS.SEQUENCE_LEN,), dtype='int32')
+# 
+# embedded = Embedding(FLAGS.VOCAB_SIZE, 
+#               FLAGS.EMBEDDING_SIZE, 
+#               input_length=FLAGS.SEQUENCE_LEN, 
+#               weights=[embedding_weights], 
+#               dropout=0.2,
+#               trainable=False)(my_input)
+#               
+# forwards = Bidirectional(GRU(FLAGS.LATENT_SIZE,
+#                return_sequences=True,
+#                dropout_W=0.2,
+#                dropout_U=0.2))(embedded)
+# 
+# output = Dropout(0.5)(forwards)
+# 
+# # output_vague = TimeDistributed(Dense(1, activation='sigmoid'), name='loss_vague')(output)
+# output_lm = TimeDistributed(Dense(FLAGS.VOCAB_SIZE, activation='softmax'), name='loss_lm')(output)
+
+
+
+
+inputs = tf.placeholder(tf.int32, shape=(None, FLAGS.SEQUENCE_LEN), name='inputs')
+targets = tf.placeholder(tf.int32, shape=(None, FLAGS.SEQUENCE_LEN), name='targets')
+embedding_tensor = tf.Variable(initial_value=embedding_weights, name='embedding_matrix')
+embeddings = tf.nn.embedding_lookup(embedding_tensor, inputs)
+with tf.variable_scope('encoder_decoder'):
+    cell = utils.create_cell()
+    embeddings_time_steps = tf.unstack(embeddings, axis=1)
+    encoder_outputs, encoder_state = tf.contrib.rnn.static_rnn(
+                cell, embeddings_time_steps, dtype=tf.float32)
+    initial_state = encoder_outputs[-1]
+    tf.get_variable_scope().reuse_variables()
+    decoder_outputs, decoder_state = tf.contrib.rnn.static_rnn(
+                cell, embeddings_time_steps, initial_state=initial_state, dtype=tf.float32)
+
+# is this right?
+output = tf.reshape(tf.stack(axis=1, values=decoder_outputs), [-1, FLAGS.LATENT_SIZE])
+# output = tf.nn.dropout(output, 0.5)
+logits = tf.layers.dense(output, FLAGS.VOCAB_SIZE)
+logits = tf.reshape(logits, [-1, FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE])
+loss = tf.contrib.seq2seq.sequence_loss(
+        logits,
+        targets,
+        tf.ones_like(inputs, dtype=tf.float32),
+        average_across_timesteps=False,
+        average_across_batch=True
+    )
+cost = tf.reduce_sum(loss)
+tvars = tf.trainable_variables()
+tvar_names = [var.name for var in tvars]
+# TODO: change to rms optimizer
+optimizer = tf.train.AdamOptimizer().minimize(cost, var_list=tvars)
+predictions = tf.cast(tf.argmax(logits, axis=2, name='predictions'), tf.int32)
+accuracy = tf.reduce_mean(tf.cast(tf.equal(predictions, targets), "float"))
+
+global_step = tf.Variable(-1, name='global_step', trainable=False)
+saver = tf.train.Saver()
+
+
+def idx_to_categorical(y, num_categories):
+    categorical_y = np.array(np_utils.to_categorical(y.flatten(), num_categories))
+    categorical_y = categorical_y.reshape(-1, y.shape[1], num_categories)
+    return categorical_y
+
+def batch_generator(x, y):
+    data_len = x.shape[0]
+    for i in range(0, data_len, FLAGS.BATCH_SIZE):
+        batch_x = x[i:min(i+FLAGS.BATCH_SIZE,data_len)]
+        batch_y = y[i:min(i+FLAGS.BATCH_SIZE,data_len)]
+        yield batch_x, batch_y, i, data_len
+
+with tf.Session() as sess:
+    # Create a saver.
+#     saver = tf.train.Saver(var_list=tf.trainable_variables())
+    tf.add_to_collection('inputs', inputs)
+    tf.add_to_collection('predictions', predictions)
+#     train_writer = tf.summary.FileWriter(summary_file + '/train', sess.graph)
+    tf.global_variables_initializer().run()
+#     if args.resume:
+
+    ckpt = tf.train.get_checkpoint_state(ckpt_dir)
+    if ckpt and ckpt.model_checkpoint_path:
+        print ckpt.model_checkpoint_path
+        saver.restore(sess, ckpt.model_checkpoint_path) # restore all variables
+
+    start = global_step.eval() + 1 # get last global_step and start the next one
+    print "Start from:", start
+        
+    for cur_epoch in range(FLAGS.EPOCHS):
+        for batch_x, batch_y, cur, data_len in batch_generator(train_X, train_Y):
+            batch_cost, batch_accuracy, batch_logits, _ = sess.run([cost, accuracy, logits, optimizer], 
+                                                     feed_dict={inputs:batch_x, targets:batch_y})
+            
+            test_batch_x = test_X[:FLAGS.BATCH_SIZE]
+            test_batch_y = test_Y[:FLAGS.BATCH_SIZE]
+            preds = sess.run([predictions], 
+                             feed_dict={inputs:test_batch_x[:FLAGS.BATCH_SIZE], targets:test_batch_y})
+            preds = preds[0]
+            for i in range(min(2, len(preds))):
+                for j in range(len(preds[i])):
+                    if test_batch_y[i][j] == 0:
+                        print '<>',
+                    else:
+                        word = d[test_batch_y[i][j]]
+                        print word,
+                    print '\t\t',
+                    if preds[i][j] == 0:
+                        print '<>',
+                    else:
+                        word = d[preds[i][j]]
+                        print word,
+                    print ''
+                print '\n'
+            print(preds)
+            print('Iter: {}'.format(cur_epoch))
+            print('Instance ', cur, ' out of ', data_len)
+            print('Loss ', batch_cost)
+            print('Accuracy ', batch_accuracy)
+            
+        print 'saving model to file:'
+        global_step.assign(cur_epoch).eval() # set and update(eval) global_step with index, i
+        saver.save(sess, ckpt_dir + "/model.ckpt", global_step=global_step)
+        vars = sess.run(tvars)
+        variables = dict(zip(tvar_names, vars))
+        np.savez(variables_file, **variables)
+        
+
+print('done')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

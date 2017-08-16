@@ -2,14 +2,16 @@
 # -*- coding: utf-8 -*-
 
 # from __future__ import print_function
-import numpy
+import numpy as np
 import tensorflow as tf
 import h5py
 from tensorflow.contrib.rnn import BasicRNNCell, BasicLSTMCell, GRUCell
+from seq2seq import  embedding_rnn_decoder
 import utils
+import param_names
 import argparse
 
-numpy.random.seed(123)
+np.random.seed(123)
 from keras.models import Sequential, Model, load_model
 from keras.layers import Dense, Dropout, Activation, merge, Input, TimeDistributed, Bidirectional
 from keras.layers import Embedding, LSTM, GRU, Flatten
@@ -19,23 +21,19 @@ from keras.regularizers import l2
 from keras import metrics
 from keras.callbacks import EarlyStopping
 
-model_file = '../models/tf_lm_model'
-variables_file = '../models/tf_lm_variables.npz'
+train_model_file = '../models/tf_lm_model'
+train_variables_file = '../models/tf_lm_variables.npz'
+test_model_file = '../models/tf_lm_test_model'
+test_variables_file = '../models/tf_lm_test_variables.npz'
 dataset_file = '../data/dataset.h5'
 embedding_weights_file = '../data/embedding_weights.h5'
 dictionary_file = '../data/words.dict'
- 
-vocab_size = 5000
-embedding_dim = 300
-maxlen = 50
-hidden_dim = 512
-batch_size = 128
-nb_epoch = 20
-samples_per_epoch = None
 
 FLAGS = tf.app.flags.FLAGS
-tf.app.flags.DEFINE_integer('EPOCHS', 5000,
+tf.app.flags.DEFINE_integer('EPOCHS', 20,
                             'Num epochs.')
+tf.app.flags.DEFINE_integer('VOCAB_SIZE', 5000,
+                            'Number of words in the vocabulary.')
 tf.app.flags.DEFINE_integer('LATENT_SIZE', 512,
                             'Size of both the hidden state of RNN and random vector z.')
 tf.app.flags.DEFINE_integer('SEQUENCE_LEN', 50,
@@ -58,7 +56,7 @@ if args.fast:
     nb_epoch = 1
     
 print('loading model parameters')
-params = numpy.load(variables_file)
+params = np.load(train_variables_file)
     
 print('loading embedding weights')
 with h5py.File(embedding_weights_file, 'r') as hf:
@@ -118,87 +116,118 @@ print('building model')
 # embedding_tensor = gru_graph.get_tensor_by_name('embedding_matrix:0')
 # tf.get_variable_scope().reuse_variables()
 
-inputs = tf.placeholder(tf.int32, shape=(None, maxlen), name='inputs')
-targets = tf.placeholder(tf.int32, shape=(None, maxlen), name='targets')
-embedding_tensor = tf.Variable(initial_value=embedding_weights, name='embedding_matrix')
-embeddings = tf.nn.embedding_lookup(embedding_tensor, inputs)
+inputs = tf.placeholder(tf.int32, shape=(None, FLAGS.SEQUENCE_LEN), name='inputs')
+# targets = tf.placeholder(tf.int32, shape=(None, FLAGS.SEQUENCE_LEN), name='targets')
+z = tf.placeholder(tf.float32, [None, FLAGS.LATENT_SIZE], name='z')
+# zero_inputs = tf.unstack(tf.zeros_like(inputs, dtype=tf.int32), axis=1)
+ones = tf.ones_like(inputs, dtype=tf.int32)
+start_symbol_input = tf.unstack(ones + ones, axis=1)
+# embedding_tensor = tf.Variable(initial_value=embedding_weights, name='embedding_matrix')
+# embeddings = tf.nn.embedding_lookup(embedding_tensor, inputs)
 cell = utils.create_cell()
-embeddings_time_steps = tf.unstack(embeddings, axis=1)
-outputs, state = tf.contrib.rnn.static_rnn(
-            cell, embeddings_time_steps, dtype=tf.float32)
+# embeddings_time_steps = tf.unstack(embeddings, axis=1)
+# outputs, state = tf.contrib.rnn.static_rnn(
+#             cell, embeddings_time_steps, dtype=tf.float32)
+
+def sample_Z(m, n):
+    return np.zeros((m, n))
+#     return np.random.normal(size=[m, n])
+
+W = tf.Variable(tf.random_normal([FLAGS.LATENT_SIZE, FLAGS.VOCAB_SIZE]), name='W')    
+b = tf.Variable(tf.random_normal([FLAGS.VOCAB_SIZE]), name='b')    
+
+outputs, states = embedding_rnn_decoder(start_symbol_input,   # is this ok? I'm not sure what giving 0 inputs does (although it should be completely ignoring inputs)
+                          z,
+                          cell,
+                          FLAGS.VOCAB_SIZE,
+                          FLAGS.EMBEDDING_SIZE,
+                          output_projection=(W,b),
+                          feed_previous=True,
+                          update_embedding_for_previous=True)
 
 # is this right?
-output = tf.reshape(tf.stack(axis=1, values=outputs), [-1, hidden_dim])
+output = tf.reshape(tf.stack(axis=1, values=outputs), [-1, FLAGS.LATENT_SIZE])
 # output = tf.nn.dropout(output, 0.5)
-logits = tf.layers.dense(output, vocab_size)
-logits = tf.reshape(logits, [-1, maxlen, vocab_size])
-loss = tf.contrib.seq2seq.sequence_loss(
-        logits,
-        targets,
-        tf.ones_like(inputs, dtype=tf.float32),
-        average_across_timesteps=False,
-        average_across_batch=True
-    )
-cost = tf.reduce_sum(loss)
+# logits = tf.layers.dense(output, FLAGS.VOCAB_SIZE)
+logits = tf.matmul(output, W) + b
+logits = tf.reshape(logits, [-1, FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE])
+# loss = tf.contrib.seq2seq.sequence_loss(
+#         logits,
+#         targets,
+#         tf.ones_like(inputs, dtype=tf.float32),
+#         average_across_timesteps=False,
+#         average_across_batch=True
+#     )
+# cost = tf.reduce_sum(loss)
 tvars = tf.trainable_variables()
+tvar_names = [var.name for var in tvars]
+
+def get_variable_by_name(name):
+    list = [v for v in tvars if v.name == name]
+    if len(list) < 0:
+        raise 'No variable found by name: ' + name
+    if len(list) > 1:
+        raise 'Multiple variables found by name: ' + name
+    return list[0]
+
+def assign_variable_op(pretrained_name, cur_name):
+    pretrained_value = params[pretrained_name]
+    var = get_variable_by_name(cur_name)
+    return var.assign(pretrained_value)
+    
 assign_ops = []
-for var in tvars:
-    assign_ops.append(var.assign(params[var.name]))
+for pair in param_names.LM_VARIABLE_PAIRS:
+    assign_ops.append(assign_variable_op(pair[0], pair[1]))
 # TODO: change to rms optimizer
-optimizer = tf.train.AdamOptimizer().minimize(cost, var_list=tvars)
+# optimizer = tf.train.AdamOptimizer().minimize(cost, var_list=tvars)
 predictions = tf.cast(tf.argmax(logits, axis=2, name='predictions'), tf.int32)
-accuracy = tf.reduce_mean(tf.cast(tf.equal(predictions, targets), "float"))
+# accuracy = tf.reduce_mean(tf.cast(tf.equal(predictions, targets), "float"))
 
 
 def idx_to_categorical(y, num_categories):
-    categorical_y = numpy.array(np_utils.to_categorical(y.flatten(), num_categories))
+    categorical_y = np.array(np_utils.to_categorical(y.flatten(), num_categories))
     categorical_y = categorical_y.reshape(-1, y.shape[1], num_categories)
     return categorical_y
 
 def batch_generator(x, y):
     data_len = x.shape[0]
-    for i in range(0, data_len, batch_size):
-        batch_x = x[i:min(i+batch_size,data_len)]
-        batch_y = y[i:min(i+batch_size,data_len)]
+    for i in range(0, data_len, FLAGS.BATCH_SIZE):
+        batch_x = x[i:min(i+FLAGS.BATCH_SIZE,data_len)]
+        batch_y = y[i:min(i+FLAGS.BATCH_SIZE,data_len)]
         yield batch_x, batch_y, i, data_len
 
 with tf.Session() as sess:
 #     train_writer = tf.summary.FileWriter(summary_file + '/train', sess.graph)
     tf.global_variables_initializer().run()
     sess.run(assign_ops)
-    for cur_epoch in range(nb_epoch):
+    for cur_epoch in range(FLAGS.EPOCHS):
         for batch_x, batch_y, cur, data_len in batch_generator(train_X, train_Y):
-            batch_cost, batch_accuracy, batch_logits, _ = sess.run([cost, accuracy, logits, optimizer], 
-                                                     feed_dict={inputs:batch_x, targets:batch_y})
+            batch_z = sample_Z(batch_x.shape[0], FLAGS.LATENT_SIZE)
+            batch_logits, batch_predictions = sess.run([logits, predictions], 
+                                                     feed_dict={inputs:batch_x, z:batch_z})
             
-            test_batch_x = test_X[:batch_size]
-            test_batch_y = test_Y[:batch_size]
-            preds = sess.run([predictions], 
-                             feed_dict={inputs:test_batch_x[:batch_size], targets:test_batch_y})
-            preds = preds[0]
+            preds = batch_predictions
             for i in range(min(2, len(preds))):
                 for j in range(len(preds[i])):
-                    if test_batch_y[i][j] == 0:
-                        print '<>',
-                    else:
-                        word = d[test_batch_y[i][j]]
-                        print word,
-                    print '\t\t',
+#                     if test_batch_y[i][j] == 0:
+#                         print '<>',
+#                     else:
+#                         word = d[test_batch_y[i][j]]
+#                         print word,
+#                     print '\t\t',
                     if preds[i][j] == 0:
                         print '<>',
                     else:
                         word = d[preds[i][j]]
                         print word,
-                    print '\n'
                 print '\n'
             print(preds)
             print('Iter: {}'.format(cur_epoch))
             print('Instance ', cur, ' out of ', data_len)
-            print('Loss ', batch_cost)
-            print('Accuracy ', batch_accuracy)
+#             print('Loss ', batch_cost)
+#             print('Accuracy ', batch_accuracy)
             
-    print 'saving model to file:'
-    saver.save(sess, 'gru-model')
+    
         
 
 print('done')

@@ -22,11 +22,11 @@ float_type = numpy.float32
 
 train_file = '../data/Privacy_Sentences.txt'
 word_id_file = '../data/train.h5'
-dict_file = '../data/words.dict'
+dict_file = '../data/annotated_words.dict'
 embedding_file = '../data/GoogleNews-vectors-negative300.bin'
 vague_file = '../data/vague_terms'
-dataset_file = '../data/dataset.h5'
-embedding_weights_file = '../data/embedding_weights.h5'
+dataset_file = '../data/annotated_dataset.h5'
+embedding_weights_file = '../data/annotated_embedding_weights.h5'
 clean_data_json = '../data/clean_data.json'
 vague_phrases_file = '../data/vague_phrases.txt'
 

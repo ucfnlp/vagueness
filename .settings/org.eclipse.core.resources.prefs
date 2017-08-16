@@ -1,4 +1,6 @@
 eclipse.preferences.version=1
+encoding//code_gan/enc_dec_test.py=utf-8
+encoding//code_gan/encoder_decoder.py=utf-8
 encoding//code_gan/gru.py=utf-8
 encoding//code_gan/gru_keras.py=utf-8
 encoding//code_gan/gru_test.py=utf-8
