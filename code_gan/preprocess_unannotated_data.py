@@ -36,7 +36,10 @@ start_tag = ['<s>']
 end_tag = ['</s>']
 with codecs.open(train_file) as infile:
     for line in infile:
-        words = start_tag + line.strip().split() + end_tag
+        words = line.strip().split()
+        if len(words) == 0:
+            continue
+        words = start_tag + words + end_tag
         sentences.append(' '.join(words))
 print('total number of sentences in train file: %d' % len(sentences))
     

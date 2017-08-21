@@ -8,6 +8,7 @@ import h5py
 from tensorflow.contrib.rnn import BasicRNNCell, BasicLSTMCell, GRUCell
 import utils
 import argparse
+import os
 
 np.random.seed(123)
 from keras.models import Sequential, Model, load_model
@@ -28,7 +29,7 @@ ckpt_dir = '../models/enc_dec_ckpts'
 fast = False
 
 FLAGS = tf.app.flags.FLAGS
-tf.app.flags.DEFINE_integer('EPOCHS', 20,
+tf.app.flags.DEFINE_integer('EPOCHS', 80,
                             'Num epochs.')
 tf.app.flags.DEFINE_integer('VOCAB_SIZE', 5000,
                             'Number of words in the vocabulary.')
@@ -55,7 +56,10 @@ parser.add_argument("--resume", help="resume from last saved epoch",
 args = parser.parse_args()
  
 if args.fast or fast:
-    FLAGS.EPOCHS = 4
+    FLAGS.EPOCHS = 2
+
+if not os.path.exists(ckpt_dir):
+    os.makedirs(ckpt_dir)
     
 print('loading embedding weights')
 with h5py.File(embedding_weights_file, 'r') as hf:
@@ -171,7 +175,7 @@ with tf.Session() as sess:
     start = global_step.eval() + 1 # get last global_step and start the next one
     print "Start from:", start
         
-    for cur_epoch in range(FLAGS.EPOCHS):
+    for cur_epoch in range(start, FLAGS.EPOCHS):
         for batch_x, batch_y, cur, data_len in batch_generator(train_X, train_Y):
             batch_cost, batch_accuracy, batch_logits, _ = sess.run([cost, accuracy, logits, optimizer], 
                                                      feed_dict={inputs:batch_x, targets:batch_y})
@@ -197,7 +201,7 @@ with tf.Session() as sess:
                     print ''
                 print '\n'
             print(preds)
-            print('Iter: {}'.format(cur_epoch))
+            print('Epoch: {}'.format(cur_epoch))
             print('Instance ', cur, ' out of ', data_len)
             print('Loss ', batch_cost)
             print('Accuracy ', batch_accuracy)

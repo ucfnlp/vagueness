@@ -22,7 +22,8 @@ from keras import metrics
 from keras.callbacks import EarlyStopping
 
 train_model_file = '../models/tf_lm_model'
-train_variables_file = '../models/tf_lm_variables.npz'
+# train_variables_file = '../models/tf_lm_variables (copy).npz'
+train_variables_file = '../models/tf_enc_dec_variables.npz'
 test_model_file = '../models/tf_lm_test_model'
 test_variables_file = '../models/tf_lm_test_variables.npz'
 dataset_file = '../data/dataset.h5'
@@ -53,7 +54,7 @@ parser.add_argument("--fast", help="run in fast mode for testing",
 args = parser.parse_args()
  
 if args.fast:
-    nb_epoch = 1
+    FLAGS.EPOCHS = 2
     
 print('loading model parameters')
 params = np.load(train_variables_file)
@@ -136,14 +137,15 @@ def sample_Z(m, n):
 W = tf.Variable(tf.random_normal([FLAGS.LATENT_SIZE, FLAGS.VOCAB_SIZE]), name='W')    
 b = tf.Variable(tf.random_normal([FLAGS.VOCAB_SIZE]), name='b')    
 
-outputs, states = embedding_rnn_decoder(start_symbol_input,   # is this ok? I'm not sure what giving 0 inputs does (although it should be completely ignoring inputs)
+outputs, states, samples, probs = embedding_rnn_decoder(start_symbol_input,   # is this ok? I'm not sure what giving 0 inputs does (although it should be completely ignoring inputs)
                           z,
                           cell,
                           FLAGS.VOCAB_SIZE,
                           FLAGS.EMBEDDING_SIZE,
                           output_projection=(W,b),
                           feed_previous=True,
-                          update_embedding_for_previous=True)
+                          update_embedding_for_previous=True,
+                          sample_from_distribution=True)
 
 # is this right?
 output = tf.reshape(tf.stack(axis=1, values=outputs), [-1, FLAGS.LATENT_SIZE])
@@ -161,26 +163,15 @@ logits = tf.reshape(logits, [-1, FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE])
 # cost = tf.reduce_sum(loss)
 tvars = tf.trainable_variables()
 tvar_names = [var.name for var in tvars]
-
-def get_variable_by_name(name):
-    list = [v for v in tvars if v.name == name]
-    if len(list) < 0:
-        raise 'No variable found by name: ' + name
-    if len(list) > 1:
-        raise 'Multiple variables found by name: ' + name
-    return list[0]
-
-def assign_variable_op(pretrained_name, cur_name):
-    pretrained_value = params[pretrained_name]
-    var = get_variable_by_name(cur_name)
-    return var.assign(pretrained_value)
     
 assign_ops = []
-for pair in param_names.LM_VARIABLE_PAIRS:
-    assign_ops.append(assign_variable_op(pair[0], pair[1]))
+for pair in param_names.ENC_DEC_PARAMS.VARIABLE_PAIRS:
+    assign_ops.append(utils.assign_variable_op(params, tvars, pair[0], pair[1]))
 # TODO: change to rms optimizer
 # optimizer = tf.train.AdamOptimizer().minimize(cost, var_list=tvars)
 predictions = tf.cast(tf.argmax(logits, axis=2, name='predictions'), tf.int32)
+samples = tf.stack(samples, axis=1)
+probs = tf.stack(probs, axis=1)
 # accuracy = tf.reduce_mean(tf.cast(tf.equal(predictions, targets), "float"))
 
 
@@ -195,6 +186,14 @@ def batch_generator(x, y):
         batch_x = x[i:min(i+FLAGS.BATCH_SIZE,data_len)]
         batch_y = y[i:min(i+FLAGS.BATCH_SIZE,data_len)]
         yield batch_x, batch_y, i, data_len
+        
+def softmax(x):
+    """Compute softmax values for each sets of scores in x."""
+    res = np.zeros(x.shape)
+#     for i in range(len(x)):
+#         res[i] = np.exp(x[i]) / np.sum(np.exp(x[i]), axis=0)
+    res = np.exp(x) / np.sum(np.exp(x), axis=0)
+    return res
 
 with tf.Session() as sess:
 #     train_writer = tf.summary.FileWriter(summary_file + '/train', sess.graph)
@@ -203,10 +202,19 @@ with tf.Session() as sess:
     for cur_epoch in range(FLAGS.EPOCHS):
         for batch_x, batch_y, cur, data_len in batch_generator(train_X, train_Y):
             batch_z = sample_Z(batch_x.shape[0], FLAGS.LATENT_SIZE)
-            batch_logits, batch_predictions = sess.run([logits, predictions], 
-                                                     feed_dict={inputs:batch_x, z:batch_z})
+            batch_logits, batch_predictions, batch_samples, batch_probs = sess.run(
+                        [logits, predictions, samples, probs], 
+                        feed_dict={inputs:batch_x, z:batch_z})
             
-            preds = batch_predictions
+#             preds = batch_predictions
+            preds = batch_samples
+            a = batch_logits[0]
+            b=softmax(a)
+            c=np.argmax(b)
+            e=np.max(b)
+            m = c/5000
+            n = c%5000
+            
             for i in range(min(2, len(preds))):
                 for j in range(len(preds[i])):
 #                     if test_batch_y[i][j] == 0:
@@ -222,6 +230,11 @@ with tf.Session() as sess:
                         print word,
                 print '\n'
             print(preds)
+#             sorted_logits = np.sort(batch_logits[0])[::-1]
+#             for j in range(3):
+#                 for k in range(20):
+#                     print sorted_logits[j][k]
+#                 print '\n'
             print('Iter: {}'.format(cur_epoch))
             print('Instance ', cur, ' out of ', data_len)
 #             print('Loss ', batch_cost)

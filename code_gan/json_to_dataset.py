@@ -22,7 +22,7 @@ float_type = numpy.float32
 
 train_file = '../data/Privacy_Sentences.txt'
 word_id_file = '../data/train.h5'
-dict_file = '../data/annotated_words.dict'
+dict_file = '../data/words.dict'
 embedding_file = '../data/GoogleNews-vectors-negative300.bin'
 vague_file = '../data/vague_terms'
 dataset_file = '../data/annotated_dataset.h5'
@@ -65,6 +65,14 @@ def labelVagueWords(sentence, vague_phrases):
         raise ValueError('len labels does not equal len sentence')
     return labels
 
+# read in existing dictionary created by preprocess_unannotated.py
+print('loading dictionary')
+d = {}
+with open(dict_file) as f:
+    for line in f:
+       (val, key) = line.split()
+       d[val] = int(key)
+
 # Reads in the JSON data
 with open(clean_data_json) as f:
     json_str = f.read()
@@ -82,10 +90,14 @@ Y_sentence = []
 Y_word = []
 sentence_doc_ids = []
 vague_phrases = {}
+start_tag = ['<s>']
 end_tag = ['</s>']
 for doc in data['docs']:
     for sent in doc['vague_sentences']:
-        words = sent['sentence_str'].strip().split() + end_tag
+        words = sent['sentence_str'].strip().split()
+        if len(words) == 0:
+            continue
+        words = start_tag + words + end_tag
         sentences.append(' '.join(words))
         
         # Get the sentence-level scores
@@ -122,64 +134,76 @@ plt.hist(Y_sentence)
 plt.title("Sentence-Level Vagueness Score Distribution")
 plt.xlabel("Score")
 plt.ylabel("Number of Sentences")
-plt.show()
+# plt.show()
 
 sorted_vague_phrases = sorted(vague_phrases.items(), key=operator.itemgetter(1), reverse=True)
 with open(vague_phrases_file, 'w') as f:
     for phrase, count in sorted_vague_phrases:
         if phrase != '':
             f.write(phrase + ': ' + str(count) + '\n')
+            
+word_id_seqs = []
+for sent in sentences:
+    words = sent.lower().split()
+    word_id_seq = []
+    for word in words:
+        if (not d.has_key(word)) or (d[word] >= vocab_size):
+            word_id_seq.append(0)
+        else:
+            word_id_seq.append(d[word])
+    word_id_seqs.append(word_id_seq)
+        
         
     
-# tokenize, create vocabulary
-tokenizer = Tokenizer(nb_words=vocab_size, filters=' ')
-tokenizer.fit_on_texts(sentences)
-word_id_seqs = tokenizer.texts_to_sequences(sentences)
-print('finished creating the dictionary')
+# # tokenize, create vocabulary
+# tokenizer = Tokenizer(nb_words=vocab_size, filters=' ')
+# tokenizer.fit_on_texts(sentences)
+# word_id_seqs = tokenizer.texts_to_sequences(sentences)
+# print('finished creating the dictionary')
     
-# output dictionary
-with codecs.open(dict_file, 'w') as outfile:
-    for word, idx in sorted(tokenizer.word_index.items(), key=operator.itemgetter(1)):
-        outfile.write('%s %d\n' % (word, idx))
-    
-# output list of word ids
-total_word_ids = 0
-my_word_ids = []
-for word_id_seq in word_id_seqs:
-    for word_id in word_id_seq[-maxlen-1:]: #TODO
-        total_word_ids += 1
-        my_word_ids.append(word_id)
-    
-outfile = h5py.File(word_id_file, 'w')
-states = outfile.create_dataset('words', data=numpy.array(my_word_ids))
-outfile.flush()
-outfile.close()
+# # output dictionary
+# with codecs.open(dict_file, 'w') as outfile:
+#     for word, idx in sorted(tokenizer.word_index.items(), key=operator.itemgetter(1)):
+#         outfile.write('%s %d\n' % (word, idx))
+#     
+# # output list of word ids
+# total_word_ids = 0
+# my_word_ids = []
+# for word_id_seq in word_id_seqs:
+#     for word_id in word_id_seq[-maxlen-1:]: #TODO
+#         total_word_ids += 1
+#         my_word_ids.append(word_id)
+#     
+# outfile = h5py.File(word_id_file, 'w')
+# states = outfile.create_dataset('words', data=numpy.array(my_word_ids))
+# outfile.flush()
+# outfile.close()
 
-# prepare embedding weights
-word2vec_model = Word2Vec.load_word2vec_format(embedding_file, binary=True)
-embedding_weights = numpy.zeros((vocab_size, embedding_dim), dtype=float_type)
-   
-n_words_in_word2vec = 0
-n_words_not_in_word2vec = 0
-   
-for word, idx in tokenizer.word_index.items():
-    if idx < vocab_size:
-        try: 
-            embedding_weights[idx,:] = word2vec_model[word]
-            n_words_in_word2vec += 1
-        except:
-            embedding_weights[idx,:] = 0.01 * numpy.random.randn(1, embedding_dim).astype(float_type)
-            n_words_not_in_word2vec += 1
-print('%d words found in word2vec, %d are not' % (n_words_in_word2vec, n_words_not_in_word2vec))
-outfile = h5py.File(embedding_weights_file, 'w')
-outfile.create_dataset('embedding_weights', data=embedding_weights)
-outfile.flush()
-outfile.close()
+# # prepare embedding weights
+# word2vec_model = Word2Vec.load_word2vec_format(embedding_file, binary=True)
+# embedding_weights = numpy.zeros((vocab_size, embedding_dim), dtype=float_type)
+#    
+# n_words_in_word2vec = 0
+# n_words_not_in_word2vec = 0
+#    
+# for word, idx in tokenizer.word_index.items():
+#     if idx < vocab_size:
+#         try: 
+#             embedding_weights[idx,:] = word2vec_model[word]
+#             n_words_in_word2vec += 1
+#         except:
+#             embedding_weights[idx,:] = 0.01 * numpy.random.randn(1, embedding_dim).astype(float_type)
+#             n_words_not_in_word2vec += 1
+# print('%d words found in word2vec, %d are not' % (n_words_in_word2vec, n_words_not_in_word2vec))
+# outfile = h5py.File(embedding_weights_file, 'w')
+# outfile.create_dataset('embedding_weights', data=embedding_weights)
+# outfile.flush()
+# outfile.close()
 
 # Pad X and Y
 X = word_id_seqs
-X_padded = pad_sequences(X, maxlen=maxlen)
-Y_padded_word = pad_sequences(Y_word, maxlen=maxlen)
+X_padded = pad_sequences(X, maxlen=maxlen, padding='post')
+Y_padded_word = pad_sequences(Y_word, maxlen=maxlen, padding='post')
 Y_sentence = numpy.asarray(Y_sentence)
 Y_padded_word = Y_padded_word.reshape(Y_padded_word.shape[0], Y_padded_word.shape[1], 1)
 

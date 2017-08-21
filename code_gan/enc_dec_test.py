@@ -51,7 +51,7 @@ parser.add_argument("--fast", help="run in fast mode for testing",
 args = parser.parse_args()
  
 if args.fast:
-    nb_epoch = 1
+    FLAGS.EPOCHS = 2
     
 print('loading model parameters')
 params = np.load(train_variables_file)
@@ -128,8 +128,8 @@ cell = utils.create_cell()
 #             cell, embeddings_time_steps, dtype=tf.float32)
 
 def sample_Z(m, n):
-    return np.zeros((m, n))
-#     return np.random.normal(size=[m, n])
+#     return np.zeros((m, n))
+    return np.random.normal(size=[m, n])
 
 W = tf.Variable(tf.random_normal([FLAGS.LATENT_SIZE, FLAGS.VOCAB_SIZE]), name='W')    
 b = tf.Variable(tf.random_normal([FLAGS.VOCAB_SIZE]), name='b')    
@@ -174,7 +174,7 @@ def assign_variable_op(pretrained_name, cur_name):
     return var.assign(pretrained_value)
     
 assign_ops = []
-for pair in param_names.LM_VARIABLE_PAIRS:
+for pair in param_names.ENC_DEC_PARAMS.VARIABLE_PAIRS:
     assign_ops.append(assign_variable_op(pair[0], pair[1]))
 # TODO: change to rms optimizer
 # optimizer = tf.train.AdamOptimizer().minimize(cost, var_list=tvars)

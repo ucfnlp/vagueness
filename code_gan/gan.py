@@ -10,15 +10,23 @@ import h5py
 from docutils.nodes import generated
 import generator
 from discriminator import discriminator
+import param_names
+import utils
 
-prediction_file = 'predictions.txt'
+prediction_file = '../predictions/predictions_gan'
 y_file = 'y.txt'
-prediction_words_file = 'predictions_words.txt'
+prediction_words_file = '../predictions/predictions_words_gan'
 summary_file = '/home/logan/tmp'
 model_file = '../models/gan_model'
 dataset_file = '../data/annotated_dataset.h5'
 embedding_weights_file = '../data/embedding_weights.h5'
 dictionary_file = '../data/words.dict'
+# train_variables_file = '../models/tf_enc_dec_variables.npz'
+train_variables_file = '../models/tf_lm_variables (copy).npz'
+ckpt_dir = '../models/gan_ckpts'
+gan_variables_file = '../models/tf_gan_variables.npz'
+start_symbol_index = 2
+use_checkpoint = False
 
 # np.random.seed(123)
 
@@ -27,7 +35,9 @@ start_time = time.time()
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_integer('EPOCHS', 5000,
                             'Num epochs.')
-tf.app.flags.DEFINE_integer('LATENT_SIZE', 200,
+tf.app.flags.DEFINE_integer('VOCAB_SIZE', 5000,
+                            'Number of words in the vocabulary.')
+tf.app.flags.DEFINE_integer('LATENT_SIZE', 512,
                             'Size of both the hidden state of RNN and random vector z.')
 tf.app.flags.DEFINE_integer('SEQUENCE_LEN', 50,
                             'Max length for each sentence.')
@@ -49,6 +59,12 @@ LOAD DATA
 --------------------------------
 '''
 
+if not os.path.exists(ckpt_dir):
+    os.makedirs(ckpt_dir)
+
+print('loading model parameters')
+params = np.load(train_variables_file)
+
 print('loading embedding weights')
 with h5py.File(embedding_weights_file, 'r') as hf:
     embedding_weights = hf['embedding_weights'][:]
@@ -68,12 +84,10 @@ with open(dictionary_file) as f:
        (val, key) = line.split()
        d[int(key)] = val
        vocab_size += 1
-       
-tf.app.flags.DEFINE_integer('VOCAB_SIZE', vocab_size,
-                            'Number of words in the vocabulary.')
+#        
+# tf.app.flags.DEFINE_integer('VOCAB_SIZE', vocab_size,
+#                             'Number of words in the vocabulary.')
 
-train_x_one_hot = np.transpose(train_x)
-train_x_one_hot = np.eye(FLAGS.VOCAB_SIZE)[train_x_one_hot.astype(int)]
 
 print train_x
 for i in range(min(5, len(train_x))):
@@ -90,11 +104,13 @@ def tf_count(t, val):
     count = tf.reduce_sum(as_ints)
     return count
 
-def batch_generator(x_one_hot):
-    data_len = x_one_hot.shape[1]
+def batch_generator(x):
+    data_len = x.shape[0]
     for i in range(0, data_len, FLAGS.BATCH_SIZE):
-        yield x_one_hot[:,i:min(i+FLAGS.BATCH_SIZE,data_len)], i, data_len
-    yield None, None, None
+        x_batch = x[i:min(i+FLAGS.BATCH_SIZE,data_len)]
+        x_batch_transpose = np.transpose(x_batch)
+        x_batch_one_hot = np.eye(FLAGS.VOCAB_SIZE)[x_batch_transpose.astype(int)]
+        yield x_batch_one_hot, i, data_len
 
 def variable_summaries(var):
   """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
@@ -119,15 +135,15 @@ MODEL
 X = [tf.placeholder(tf.float32, shape=[None, FLAGS.VOCAB_SIZE]) for i in xrange(FLAGS.SEQUENCE_LEN)]
 z = tf.placeholder(tf.float32, [None, FLAGS.LATENT_SIZE], name='z')
 dims = tf.stack([tf.shape(X[0])[0],])
-zero_inputs = [tf.fill(dims, 0) for i in xrange(FLAGS.SEQUENCE_LEN)]
+start_symbol_input = [tf.fill(dims, start_symbol_index) for i in xrange(FLAGS.SEQUENCE_LEN)]
 
 def sample_Z(m, n):
-    return np.random.normal(size=[m, n])
-#     return np.random.uniform(low=-1, high=1, size=[m, n])
+    return np.zeros((m, n))
+#     return np.random.normal(size=[m, n])
 
     
 with tf.variable_scope(tf.get_variable_scope()) as scope:
-    G_sample = generator.generator(z, zero_inputs)
+    G_sample, samples, probs = generator.generator(z, start_symbol_input)
     D_real, D_logit_real = discriminator(X)
     tf.get_variable_scope().reuse_variables()
     D_fake, D_logit_fake = discriminator(G_sample)
@@ -139,8 +155,14 @@ with tf.variable_scope(tf.get_variable_scope()) as scope:
     D_loss = D_loss_real + D_loss_fake
     G_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_fake, labels=tf.zeros_like(D_logit_fake)))
 
-theta_D = [var for var in tf.trainable_variables() if 'D_' in var.name]
-theta_G = [var for var in tf.trainable_variables() if 'G_' in var.name]
+tvars = tf.trainable_variables()
+tvar_names = [var.name for var in tvars]
+assign_ops = []
+for pair in param_names.GAN_PARAMS.VARIABLE_PAIRS:
+    assign_ops.append(utils.assign_variable_op(params, tvars, pair[0], pair[1]))
+
+theta_D = [var for var in tvars if 'D_' in var.name]
+theta_G = [var for var in tvars if 'G_' in var.name]
 D_solver = tf.train.AdamOptimizer().minimize(D_loss, var_list=theta_D)
 G_solver = tf.train.AdamOptimizer().minimize(-G_loss, var_list=theta_G)
 for var in theta_D:
@@ -149,6 +171,9 @@ for var in theta_D:
 for var in theta_G:
     variable_summaries(var) 
     print var
+    
+global_step = tf.Variable(-1, name='global_step', trainable=False)
+saver = tf.train.Saver()
     
 merged = tf.summary.merge_all()
 
@@ -161,10 +186,10 @@ MAIN
 --------------------------------
 '''
 
-def save_samples_to_file(generated_sequences):
-    with open(prediction_file, 'w') as f:
+def save_samples_to_file(generated_sequences, epoch):
+    with open(prediction_file + '_epoch_' + str(epoch), 'w') as f:
         np.savetxt(f, generated_sequences, fmt='%d\t')
-    with open(prediction_words_file, 'w') as f:
+    with open(prediction_words_file + '_epoch_' + str(epoch), 'w') as f:
         for i in range(len(generated_sequences)):
             for j in range(len(generated_sequences[i])):
                 if generated_sequences[i][j] == 0:
@@ -180,28 +205,46 @@ if not os.path.exists('out/'):
 with tf.Session() as sess:
     train_writer = tf.summary.FileWriter(summary_file + '/train', sess.graph)
     tf.global_variables_initializer().run()
+    sess.run(assign_ops)
     min_test_cost = np.inf
     num_mistakes = 0
     
+    if use_checkpoint:
+        ckpt = tf.train.get_checkpoint_state(ckpt_dir)
+        if ckpt and ckpt.model_checkpoint_path:
+            print ckpt.model_checkpoint_path
+            saver.restore(sess, ckpt.model_checkpoint_path) # restore all variables
+
+    start = global_step.eval() + 1 # get last global_step and start the next one
+    print "Start from:", start
+    
+    batch, _, _ = batch_generator(train_x).next()
+    train_dict = {i: d for i, d in zip(X, batch)}
+    train_dict[z] = sample_Z(batch.shape[1], FLAGS.LATENT_SIZE)
+    batch_samples = sess.run(samples, feed_dict=train_dict)
+    save_samples_to_file(batch_samples, 'pre')
+    
     xaxis = 0
     step = 0
-    for i in range(FLAGS.EPOCHS):
-        for batch, cur, data_len in batch_generator(train_x_one_hot):
-            if batch == None:
-                break
+    for cur_epoch in range(FLAGS.EPOCHS):
+        for batch, cur, data_len in batch_generator(train_x):
             train_dict = {i: d for i, d in zip(X, batch)}
             train_dict[z] = sample_Z(batch.shape[1], FLAGS.LATENT_SIZE)
         
     
-            _, D_loss_curr, real_acc, fake_acc, summary = sess.run([D_solver, D_loss, D_real_acc, D_fake_acc, merged], feed_dict=train_dict)
-            for j in range(1):
-                sample, _, G_loss_curr = sess.run([G_sample, G_solver, G_loss], feed_dict=train_dict)
+#             _, D_loss_curr, real_acc, fake_acc, summary = sess.run([D_solver, D_loss, D_real_acc, D_fake_acc, merged], feed_dict=train_dict)
+#             for j in range(1):
+#                 batch_samples, batch_probs, _, G_loss_curr = sess.run([samples, probs, G_solver, G_loss], feed_dict=train_dict)
     
-            if i % 1 == 0:
+            D_loss_curr, real_acc, fake_acc, summary = sess.run([D_loss, D_real_acc, D_fake_acc, merged], feed_dict=train_dict)
+            for j in range(1):
+                batch_samples, batch_probs, G_loss_curr = sess.run([samples, probs, G_loss], feed_dict=train_dict)
+    
+            if cur_epoch % 1 == 0:
                 train_writer.add_summary(summary, step)
                 step += 1
-                generated_sequences = np.transpose(np.argmax(sample, axis=-1))
-                print('Iter: {}'.format(i))
+                generated_sequences = batch_samples
+                print('Iter: {}'.format(cur_epoch))
                 print('Instance ', cur, ' out of ', data_len)
                 print('D loss: {:.4}'. format(D_loss_curr))
                 print('G_loss: {:.4}'.format(G_loss_curr))
@@ -217,12 +260,19 @@ with tf.Session() as sess:
                             print word + ' ',
                     print '\n'
                 
-            if i % 100 == 0:
-                save_samples_to_file(generated_sequences)
+        if cur_epoch % 1 == 0:
+            save_samples_to_file(generated_sequences, cur_epoch)
+        
+        print 'saving model to file:'
+        global_step.assign(cur_epoch).eval() # set and update(eval) global_step with index, i
+        saver.save(sess, ckpt_dir + "/model.ckpt", global_step=global_step)
+        vars = sess.run(tvars)
+        variables = dict(zip(tvar_names, vars))
+        np.savez(gan_variables_file, **variables)
         
     train_writer.close()
         
-    save_samples_to_file(generated_sequences)
+    save_samples_to_file(generated_sequences, cur_epoch)
         
 print('Execution time: ', time.time() - start_time)
     

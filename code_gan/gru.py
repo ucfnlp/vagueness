@@ -56,7 +56,7 @@ parser.add_argument("--resume", help="resume from last saved epoch",
 args = parser.parse_args()
  
 if args.fast or fast:
-    FLAGS.EPOCHS = 4
+    FLAGS.EPOCHS = 2
 
 if not os.path.exists(ckpt_dir):
     os.makedirs(ckpt_dir)

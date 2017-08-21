@@ -13,3 +13,16 @@ def create_cell(reuse=False):
     elif FLAGS.CELL_TYPE == 'GRU':
         cell = GRUCell(num_units=FLAGS.LATENT_SIZE, activation=tf.nn.tanh, reuse=reuse)
     return cell
+
+def get_variable_by_name(tvars, name):
+    list = [v for v in tvars if v.name == name]
+    if len(list) < 0:
+        raise 'No variable found by name: ' + name
+    if len(list) > 1:
+        raise 'Multiple variables found by name: ' + name
+    return list[0]
+
+def assign_variable_op(params, tvars, pretrained_name, cur_name):
+    pretrained_value = params[pretrained_name]
+    var = get_variable_by_name(tvars, cur_name)
+    return var.assign(pretrained_value)
