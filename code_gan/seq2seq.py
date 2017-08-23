@@ -151,7 +151,8 @@ def rnn_decoder(decoder_inputs,
                 cell,
                 loop_function=None,
                 scope=None,
-                sample_from_distribution=False):
+                sample_from_distribution=False,
+                class_embedding=None):
   """RNN decoder for the sequence-to-sequence model.
 
   Args:
@@ -194,6 +195,8 @@ def rnn_decoder(decoder_inputs,
             inp = loop_function(prev, i)
       if i > 0:
         variable_scope.get_variable_scope().reuse_variables()
+      if class_embedding is not None:
+        inp = tf.concat([inp, class_embedding], 1)
       output, state = cell(inp, state)
       outputs.append(output)
       if loop_function is not None:
@@ -289,7 +292,8 @@ def embedding_rnn_decoder(decoder_inputs,
                           feed_previous=False,
                           update_embedding_for_previous=True,
                           scope=None,
-                          sample_from_distribution=False):
+                          sample_from_distribution=False,
+                          class_embedding=None):
   """RNN decoder with embedding and a pure-decoding option.
 
   Args:
@@ -352,7 +356,7 @@ def embedding_rnn_decoder(decoder_inputs,
                for i in decoder_inputs)
     return rnn_decoder(
         emb_inp, initial_state, cell, loop_function=loop_function, 
-        sample_from_distribution=sample_from_distribution)
+        sample_from_distribution=sample_from_distribution, class_embedding=class_embedding)
 
 
 def embedding_rnn_seq2seq(encoder_inputs,

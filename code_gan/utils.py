@@ -22,7 +22,10 @@ def get_variable_by_name(tvars, name):
         raise 'Multiple variables found by name: ' + name
     return list[0]
 
-def assign_variable_op(params, tvars, pretrained_name, cur_name):
-    pretrained_value = params[pretrained_name]
+def assign_variable_op(params, tvars, pretrained_name, cur_name, append=False):
     var = get_variable_by_name(tvars, cur_name)
+    pretrained_value = params[pretrained_name]
+    if append:
+        extra_weights = np.random.normal(size=(FLAGS.CLASS_EMBEDDING_SIZE, pretrained_value.shape[1]))
+        pretrained_value = np.concatenate((pretrained_value, extra_weights), axis=0)
     return var.assign(pretrained_value)

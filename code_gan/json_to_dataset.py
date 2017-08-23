@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import matplotlib.pyplot as plt
+import math
 import yaml
 import numpy
 import codecs
@@ -10,6 +11,7 @@ import h5py
 import gensim
 from gensim.models.word2vec import Word2Vec
 from numpy import nan_to_num
+from odo.backends.pandas import categorical
 
 numpy.random.seed(123)
 from keras.preprocessing.text import Tokenizer
@@ -38,6 +40,8 @@ batch_size = 128
 val_samples = batch_size * 10
 train_ratio = 0.8
 vague_phrase_threshold = 2
+min_vague_score = 1
+max_vague_score = 5
 
 '''
 Parameters
@@ -130,11 +134,26 @@ print('total vague terms: %d' % (total_vague_terms))
 print('total terms: %d' % (total_terms))
 print('average standard deviation of scores for each sentence: %f' % (numpy.average(stds)))
 
-plt.hist(Y_sentence)
+
+# plt.hist(Y_sentence)
+# plt.title("Sentence-Level Vagueness Score Distribution")
+# plt.xlabel("Score")
+# plt.ylabel("Number of Sentences")
+# plt.show()
+
+# convert from float to category (possible categories: {0,1,2,3})
+for idx, item in enumerate(Y_sentence):
+    res = math.floor(item)
+    if res == max_vague_score:
+        res = max_vague_score-1
+    res -= 1
+    Y_sentence[idx] = res
+plt.hist(Y_sentence, bins=max_vague_score-min_vague_score, range=(min_vague_score-1, max_vague_score-1))
 plt.title("Sentence-Level Vagueness Score Distribution")
 plt.xlabel("Score")
 plt.ylabel("Number of Sentences")
-# plt.show()
+plt.show()
+
 
 sorted_vague_phrases = sorted(vague_phrases.items(), key=operator.itemgetter(1), reverse=True)
 with open(vague_phrases_file, 'w') as f:
@@ -204,7 +223,7 @@ for sent in sentences:
 X = word_id_seqs
 X_padded = pad_sequences(X, maxlen=maxlen, padding='post')
 Y_padded_word = pad_sequences(Y_word, maxlen=maxlen, padding='post')
-Y_sentence = numpy.asarray(Y_sentence)
+Y_sentence = numpy.asarray(Y_sentence, dtype=numpy.int32)
 Y_padded_word = Y_padded_word.reshape(Y_padded_word.shape[0], Y_padded_word.shape[1], 1)
 
 # shuffle Documents
