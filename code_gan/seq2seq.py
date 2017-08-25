@@ -113,7 +113,8 @@ def _extract_argmax_and_embed(embedding,
   
 def _extract_sample_from_distribution_and_embed(embedding,
                               output_projection=None,
-                              update_embedding=True):
+                              update_embedding=True,
+                              vague_weights=None):
   """Get a loop_function that randomly chooses a symbol from the previous 
   distribution and embeds it.
 
@@ -132,6 +133,8 @@ def _extract_sample_from_distribution_and_embed(embedding,
     if output_projection is not None:
       prev = nn_ops.xw_plus_b(prev, output_projection[0], output_projection[1])
 #     log_probabilities = tf.log(prev)
+    if vague_weights is not None:
+        prev = tf.add(prev, vague_weights)
     probabilities = tf.nn.softmax(prev)
     log_probabilities = tf.log(probabilities)
     prev_symbol = tf.multinomial(log_probabilities, 1, name='sample')
@@ -293,7 +296,8 @@ def embedding_rnn_decoder(decoder_inputs,
                           update_embedding_for_previous=True,
                           scope=None,
                           sample_from_distribution=False,
-                          class_embedding=None):
+                          class_embedding=None,
+                          vague_weights=None):
   """RNN decoder with embedding and a pure-decoding option.
 
   Args:
@@ -347,7 +351,7 @@ def embedding_rnn_decoder(decoder_inputs,
     if sample_from_distribution:
         loop_function = _extract_sample_from_distribution_and_embed(
             embedding, output_projection, 
-            update_embedding_for_previous) if feed_previous else None
+            update_embedding_for_previous, vague_weights) if feed_previous else None
     else:
         loop_function = _extract_argmax_and_embed(
             embedding, output_projection,

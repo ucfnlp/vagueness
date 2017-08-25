@@ -6,14 +6,14 @@ import utils
 
 FLAGS = tf.app.flags.FLAGS
 
-def generator(z, c, start_symbol_input):
+def generator(z, c, vague_weights, start_symbol_input):
     with tf.variable_scope("G_"):
         cell = utils.create_cell()
 #         cell = tf.contrib.rnn.DropoutWrapper(cell, output_keep_prob=0.5)
 
-        c_embedding_matrix = tf.Variable(
-            tf.random_normal([FLAGS.NUM_CLASSES, FLAGS.CLASS_EMBEDDING_SIZE]), name='class_embedding')
-        c_embedding = tf.nn.embedding_lookup(c_embedding_matrix, c)
+#         c_embedding_matrix = tf.Variable(
+#             tf.random_normal([FLAGS.NUM_CLASSES, FLAGS.CLASS_EMBEDDING_SIZE]), name='class_embedding')
+#         c_embedding = tf.nn.embedding_lookup(c_embedding_matrix, c)
         
         W = tf.Variable(tf.random_normal([FLAGS.LATENT_SIZE, FLAGS.VOCAB_SIZE]), name='W')    
         b = tf.Variable(tf.random_normal([FLAGS.VOCAB_SIZE]), name='b')    
@@ -35,12 +35,42 @@ def generator(z, c, start_symbol_input):
                                   feed_previous=True,
                                   update_embedding_for_previous=True,
                                   sample_from_distribution=True,
-                                  class_embedding=c_embedding)
+                                  vague_weights=vague_weights)
+#                                   class_embedding=c_embedding)
 
         samples = tf.stack(samples, axis=1)
         probs = tf.stack(probs, axis=1)
         
-        logits = [tf.matmul(output, W) + b for output in outputs]
+        logits = [tf.matmul(output, W) + b for output in outputs] #TODO add vague vocabulary, and remove class embedding
+        weighted_logits = [tf.add(logit, vague_weights) for logit in logits]
         x = [tf.nn.softmax(logit) for logit in logits] # is this softmaxing over the right dimension? this turns into 3D
         return x, samples, probs
 #     tf.nn.rnn_cell.EmbeddingWrapper
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

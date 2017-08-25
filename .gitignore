@@ -10,3 +10,4 @@ predictions.h5
 *.index
 models/enc_dec_ckpts/checkpoint
 models/gan_ckpts/checkpoint
+*.npz

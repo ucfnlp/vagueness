@@ -22,7 +22,7 @@ def get_variable_by_name(tvars, name):
         raise 'Multiple variables found by name: ' + name
     return list[0]
 
-def assign_variable_op(params, tvars, pretrained_name, cur_name, append=False):
+def assign_variable_op(params, tvars, pretrained_name, cur_name, append=False): #TODO change becuase not using class embedding here
     var = get_variable_by_name(tvars, cur_name)
     pretrained_value = params[pretrained_name]
     if append:
