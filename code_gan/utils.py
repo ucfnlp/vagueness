@@ -29,3 +29,21 @@ def assign_variable_op(params, tvars, pretrained_name, cur_name, append=False): 
         extra_weights = np.random.normal(size=(FLAGS.CLASS_EMBEDDING_SIZE, pretrained_value.shape[1]))
         pretrained_value = np.concatenate((pretrained_value, extra_weights), axis=0)
     return var.assign(pretrained_value)
+
+def tf_count(t, val):
+    elements_equal_to_value = tf.equal(t, val)
+    as_ints = tf.cast(elements_equal_to_value, tf.int32)
+    count = tf.reduce_sum(as_ints)
+    return count
+
+def variable_summaries(var):
+  """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
+  with tf.name_scope('summaries'):
+    mean = tf.reduce_mean(var)
+    tf.summary.scalar('mean ' + var.name, mean)
+    with tf.name_scope('stddev'):
+      stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+    tf.summary.scalar('stddev ' + var.name, stddev)
+    tf.summary.scalar('max ' + var.name, tf.reduce_max(var))
+    tf.summary.scalar('min ' + var.name, tf.reduce_min(var))
+    tf.summary.histogram('histogram ' + var.name, var)

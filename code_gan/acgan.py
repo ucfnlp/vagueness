@@ -12,6 +12,7 @@ from generator_ac import generator
 from discriminator_ac import discriminator
 import param_names
 import utils
+import acgan_model
 
 prediction_file = '../predictions/predictions_acgan'
 y_file = 'y_acgan.txt'
@@ -26,7 +27,6 @@ train_variables_file = '../models/tf_lm_variables (copy).npz'
 ckpt_dir = '../models/acgan_ckpts'
 gan_variables_file = ckpt_dir + '/tf_acgan_variables_'
 vague_terms_file = '../data/vague_terms'
-start_symbol_index = 2
 use_checkpoint = False
 
 # np.random.seed(123)
@@ -34,7 +34,7 @@ use_checkpoint = False
 start_time = time.time()
 
 FLAGS = tf.app.flags.FLAGS
-tf.app.flags.DEFINE_integer('EPOCHS', 20,
+tf.app.flags.DEFINE_integer('EPOCHS', 50,
                             'Num epochs.')
 tf.app.flags.DEFINE_integer('VOCAB_SIZE', 5000,
                             'Number of words in the vocabulary.')
@@ -106,7 +106,7 @@ with open(vague_terms_file) as f:
             print(word, 'is out of vocabulary')
             continue
         vague_terms[id] = 1
-vague_terms = tf.constant(vague_terms, dtype=tf.float32)
+
 
 
 
@@ -119,106 +119,15 @@ for i in range(min(5, len(train_x))):
         print word + ' ',
     print '(' + str(train_y[i]) + ')\n'
 
-def tf_count(t, val):
-    elements_equal_to_value = tf.equal(t, val)
-    as_ints = tf.cast(elements_equal_to_value, tf.int32)
-    count = tf.reduce_sum(as_ints)
-    return count
-
 def batch_generator(x, y):
     data_len = x.shape[0]
     for i in range(0, data_len, FLAGS.BATCH_SIZE):
         x_batch = x[i:min(i+FLAGS.BATCH_SIZE,data_len)]
         x_batch_transpose = np.transpose(x_batch)
         x_batch_one_hot = np.eye(FLAGS.VOCAB_SIZE)[x_batch_transpose.astype(int)]
+        x_batch_one_hot_reshaped = x_batch_one_hot.reshape([-1,FLAGS.SEQUENCE_LEN,FLAGS.VOCAB_SIZE])
         y_batch = y[i:min(i+FLAGS.BATCH_SIZE,data_len)]
-        yield x_batch_one_hot, y_batch, i, data_len
-
-def variable_summaries(var):
-  """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
-  with tf.name_scope('summaries'):
-    mean = tf.reduce_mean(var)
-    tf.summary.scalar('mean ' + var.name, mean)
-    with tf.name_scope('stddev'):
-      stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
-    tf.summary.scalar('stddev ' + var.name, stddev)
-    tf.summary.scalar('max ' + var.name, tf.reduce_max(var))
-    tf.summary.scalar('min ' + var.name, tf.reduce_min(var))
-    tf.summary.histogram('histogram ' + var.name, var)
-
-
-'''
---------------------------------
-
-MODEL
-
---------------------------------
-'''
-real_x = [tf.placeholder(tf.float32, shape=[None, FLAGS.VOCAB_SIZE]) for i in xrange(FLAGS.SEQUENCE_LEN)]
-real_c = tf.placeholder(tf.int32, [None,], 'class')
-fake_c = tf.placeholder(tf.int32, [None,], 'class')
-z = tf.placeholder(tf.float32, [None, FLAGS.LATENT_SIZE], name='z')
-dims = tf.stack([tf.shape(real_x[0])[0],])
-start_symbol_input = [tf.fill(dims, start_symbol_index) for i in xrange(FLAGS.SEQUENCE_LEN)]
-
-def create_vague_weights(vague_terms, fake_c):
-    a = tf.tile(vague_terms, dims)
-    b = tf.reshape(a,[-1,FLAGS.VOCAB_SIZE])
-    vague_weights = tf.multiply(b,tf.cast(tf.reshape(fake_c - 1, [-1,1]),tf.float32))
-    return vague_weights
-vague_weights = create_vague_weights(vague_terms, fake_c)
-    
-def sample_Z(m, n):
-    return np.zeros((m, n))
-#     return np.random.normal(size=[m, n])
-
-def sample_C(m):
-    return np.random.randint(low=0, high=FLAGS.NUM_CLASSES, size=m)
-
-    
-with tf.variable_scope(tf.get_variable_scope()) as scope:
-    G_sample, samples, probs = generator(z, fake_c, vague_weights, start_symbol_input) #TODO move to generator
-    D_real, D_logit_real, D_class_logit_real = discriminator(real_x)
-    tf.get_variable_scope().reuse_variables()
-    D_fake, D_logit_fake, D_class_logit_fake = discriminator(G_sample)
-    D_real_acc = tf.cast(tf_count(tf.round(D_real), 1), tf.float32) / tf.cast(tf.shape(D_real)[0], tf.float32)
-    D_fake_acc = tf.cast(tf_count(tf.round(D_fake), 0), tf.float32) / tf.cast(tf.shape(D_fake)[0], tf.float32)
-    D_real_class_acc = tf.reduce_sum(tf.cast(tf.equal(tf.cast(tf.argmax(D_class_logit_real, axis=1), tf.int32), real_c), tf.float32)) /  tf.cast(tf.shape(real_c)[0], tf.float32)
-    D_fake_class_acc = tf.reduce_sum(tf.cast(tf.equal(tf.cast(tf.argmax(D_class_logit_fake, axis=1), tf.int32), fake_c), tf.float32)) /  tf.cast(tf.shape(fake_c)[0], tf.float32)
-
-    D_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_real, labels=tf.ones_like(D_logit_real)))
-    D_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_fake, labels=tf.zeros_like(D_logit_fake)))
-    D_loss_class_real = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=D_class_logit_real, labels=real_c))
-    D_loss_class_fake = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=D_class_logit_real, labels=fake_c))
-    D_loss = D_loss_real + D_loss_fake + D_loss_class_real + D_loss_class_fake
-    G_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_fake, labels=tf.zeros_like(D_logit_fake)))
-    G_loss = D_loss_class_fake + G_loss_fake
-
-tvars = tf.trainable_variables()
-tvar_names = [var.name for var in tvars]
-assign_ops = []
-for pair in param_names.GAN_PARAMS.VARIABLE_PAIRS:
-    append = False
-#     if pair[1] == param_names.GEN_GRU_GATES_WEIGHTS or pair[1] == param_names.GEN_GRU_CANDIDATE_WEIGHTS:
-#         append = True
-    assign_ops.append(utils.assign_variable_op(params, tvars, pair[0], pair[1], append=append))
-
-theta_D = [var for var in tvars if 'D_' in var.name]
-theta_G = [var for var in tvars if 'G_' in var.name]
-D_solver = tf.train.AdamOptimizer().minimize(D_loss, var_list=theta_D)
-G_solver = tf.train.AdamOptimizer().minimize(-G_loss, var_list=theta_G)
-for var in theta_D:
-    variable_summaries(var) 
-    print var
-for var in theta_G:
-    variable_summaries(var) 
-    print var
-    
-global_step = tf.Variable(-1, name='global_step', trainable=False)
-saver = tf.train.Saver()
-    
-merged = tf.summary.merge_all()
-
+        yield x_batch_one_hot_reshaped, y_batch, i, data_len
 
 '''
 --------------------------------
@@ -243,11 +152,14 @@ def save_samples_to_file(generated_sequences, batch_fake_c, epoch):
 
 if not os.path.exists('out/'):
     os.makedirs('out/')
+    
+model = acgan_model.ACGANModel(vague_terms, params)
+model.build_graph()
 
 with tf.Session() as sess:
     train_writer = tf.summary.FileWriter(summary_file + '/train', sess.graph)
     tf.global_variables_initializer().run()
-    sess.run(assign_ops)
+    model.assign_variables(sess)
     min_test_cost = np.inf
     num_mistakes = 0
     
@@ -257,33 +169,24 @@ with tf.Session() as sess:
             print ckpt.model_checkpoint_path
             saver.restore(sess, ckpt.model_checkpoint_path) # restore all variables
 
-    start = global_step.eval() + 1 # get last global_step and start the next one
+    start = model.get_global_step() + 1 # get last global_step and start the next one
     print "Start from:", start
     
     batch_x, batch_y, _, _ = batch_generator(train_x, train_y).next()
-    train_dict = {i: d for i, d in zip(real_x, batch_x)}
-    train_dict[real_c] = batch_y
-    train_dict[z] = sample_Z(batch_x.shape[1], FLAGS.LATENT_SIZE)
-    batch_fake_c = sample_C(batch_x.shape[1])
-    train_dict[fake_c] = batch_fake_c
-    batch_samples = sess.run(samples, feed_dict=train_dict)
+    batch_samples = model.run_samples(sess)
     save_samples_to_file(batch_samples, batch_fake_c, 'pre')
     
     xaxis = 0
     step = 0
-    for cur_epoch in range(FLAGS.EPOCHS):
+    for cur_epoch in range(start, FLAGS.EPOCHS):
         for batch_x, batch_y, cur, data_len in batch_generator(train_x, train_y):
-            train_dict = {i: d for i, d in zip(real_x, batch_x)}
-            train_dict[real_c] = batch_y
-            train_dict[z] = sample_Z(batch_x.shape[1], FLAGS.LATENT_SIZE)
+            batch_z = sample_Z(batch_x.shape[1], FLAGS.LATENT_SIZE)
             batch_fake_c = sample_C(batch_x.shape[1])
-            train_dict[fake_c] = batch_fake_c
-        
-            D_loss_curr, real_acc, fake_acc, real_class_acc, fake_class_acc, summary = sess.run(
-                [D_loss, D_real_acc, D_fake_acc, D_real_class_acc, D_fake_class_acc, merged], 
-                feed_dict=train_dict)
+            _, D_loss_curr, real_acc, fake_acc, real_class_acc, fake_class_acc, summary = model.run_D_train_step(
+                sess, batch_x, batch_y, batch_z, batch_fake_c)
             for j in range(1):
-                batch_samples, batch_probs, G_loss_curr = sess.run([samples, probs, G_loss], feed_dict=train_dict)
+                _, G_loss_curr, batch_samples, batch_probs = model.run_G_train_step(
+                    sess, batch_x, batch_y, batch_z, batch_fake_c)
     
             if cur_epoch % 1 == 0:
                 train_writer.add_summary(summary, step)
@@ -310,9 +213,13 @@ with tf.Session() as sess:
             save_samples_to_file(generated_sequences, batch_fake_c, cur_epoch)
         
         print 'saving model to file:'
-        global_step.assign(cur_epoch).eval() # set and update(eval) global_step with index, i
-        saver.save(sess, ckpt_dir + "/model.ckpt", global_step=global_step)
-        vars = sess.run(tvars)
+#         global_step.assign(cur_epoch).eval() # set and update(eval) global_step with index, cur_epoch
+        model.set_global_step(cur_epoch)
+#         saver.save(sess, ckpt_dir + "/model.ckpt", global_step=global_step)
+        saver.save(sess, ckpt_dir + "/model.ckpt", global_step=cur_epoch)
+#         vars = sess.run(tvars)
+        vars = model.get_variables(sess)
+        tvar_names = [var.name for var in tf.trainable_variables()]
         variables = dict(zip(tvar_names, vars))
         np.savez(gan_variables_file + str(cur_epoch), **variables)
         

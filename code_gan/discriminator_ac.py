@@ -7,7 +7,8 @@ FLAGS = tf.app.flags.FLAGS
 
 def discriminator(x):
     with tf.variable_scope("D_"):
-        x_stacked = tf.reshape(tf.stack(axis=1, values=x), [-1, FLAGS.VOCAB_SIZE])
+#         x_stacked = tf.reshape(tf.stack(axis=1, values=x), [-1, FLAGS.VOCAB_SIZE])
+        x_stacked = tf.reshape(x, [-1, FLAGS.VOCAB_SIZE])
         embeddings = tf.layers.dense(x_stacked,FLAGS.EMBEDDING_SIZE, use_bias=False, name='embedding')
         embeddings_unstacked = tf.unstack(
             tf.reshape(embeddings, [-1, FLAGS.SEQUENCE_LEN, FLAGS.EMBEDDING_SIZE]), axis=1)
