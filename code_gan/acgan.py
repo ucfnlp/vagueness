@@ -149,6 +149,13 @@ def save_samples_to_file(generated_sequences, batch_fake_c, epoch):
                     word = d[generated_sequences[i][j]]
                     f.write(word + ' ')
             f.write('(' + str(batch_fake_c[i]) + ')\n\n')
+            
+def sample_Z(m, n):
+    return np.zeros((m, n))
+#     return np.random.normal(size=[m, n])
+
+def sample_C(m):
+    return np.random.randint(low=0, high=FLAGS.NUM_CLASSES, size=m)
 
 if not os.path.exists('out/'):
     os.makedirs('out/')
@@ -173,15 +180,17 @@ with tf.Session() as sess:
     print "Start from:", start
     
     batch_x, batch_y, _, _ = batch_generator(train_x, train_y).next()
-    batch_samples = model.run_samples(sess)
+    batch_fake_c = np.zeros([FLAGS.BATCH_SIZE], dtype=np.int32)
+    batch_z = sample_Z(FLAGS.BATCH_SIZE, FLAGS.LATENT_SIZE)
+    batch_samples = model.run_samples(sess, batch_fake_c, batch_z)
     save_samples_to_file(batch_samples, batch_fake_c, 'pre')
     
     xaxis = 0
     step = 0
     for cur_epoch in range(start, FLAGS.EPOCHS):
         for batch_x, batch_y, cur, data_len in batch_generator(train_x, train_y):
-            batch_z = sample_Z(batch_x.shape[1], FLAGS.LATENT_SIZE)
-            batch_fake_c = sample_C(batch_x.shape[1])
+            batch_z = sample_Z(batch_x.shape[0], FLAGS.LATENT_SIZE)
+            batch_fake_c = sample_C(batch_x.shape[0])
             _, D_loss_curr, real_acc, fake_acc, real_class_acc, fake_class_acc, summary = model.run_D_train_step(
                 sess, batch_x, batch_y, batch_z, batch_fake_c)
             for j in range(1):
@@ -216,7 +225,7 @@ with tf.Session() as sess:
 #         global_step.assign(cur_epoch).eval() # set and update(eval) global_step with index, cur_epoch
         model.set_global_step(cur_epoch)
 #         saver.save(sess, ckpt_dir + "/model.ckpt", global_step=global_step)
-        saver.save(sess, ckpt_dir + "/model.ckpt", global_step=cur_epoch)
+        model.saver.save(sess, ckpt_dir + "/model.ckpt", global_step=cur_epoch)
 #         vars = sess.run(tvars)
         vars = model.get_variables(sess)
         tvar_names = [var.name for var in tf.trainable_variables()]
