@@ -1,13 +1,5 @@
 import numpy as np
 import tensorflow as tf
-from seq2seq import basic_rnn_seq2seq, rnn_decoder, embedding_rnn_decoder, sequence_loss
-from tensorflow.contrib.rnn import BasicRNNCell, BasicLSTMCell, GRUCell
-import matplotlib.pyplot as plt
-import os
-from metrics import performance
-import time
-import h5py
-from docutils.nodes import generated
 from generator_ac import generator
 from discriminator_ac import discriminator
 import param_names
@@ -40,6 +32,11 @@ class ACGANModel(object):
                                self.real_c: batch_c,
                                self.fake_c: batch_fake_c,
                                self.z: z})
+        
+    def run_test(self, sess, batch_x):
+        to_return = self.D_class_logit_real
+        return sess.run(to_return,
+                        feed_dict={self.real_x: batch_x})
         
     def run_samples(self, sess, batch_fake_c, batch_z):
         return sess.run(self.samples, feed_dict={self.fake_c: batch_fake_c,
@@ -133,12 +130,13 @@ class ACGANModel(object):
         self.merged = tf.summary.merge_all()
         
     
-    def build_graph(self):
+    def build_graph(self, include_optimizer=True):
         self._add_placeholder()
         self._add_acgan()
         self._add_loss()
         self._add_assignment_ops()
-        self._add_optimizer()
+        if include_optimizer:
+            self._add_optimizer()
         self._add_saver_and_summary()
 
     
