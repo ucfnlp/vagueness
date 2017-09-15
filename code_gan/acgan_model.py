@@ -18,7 +18,7 @@ class ACGANModel(object):
         
     def run_D_train_step(self, sess, batch_x, batch_c, z, batch_fake_c):
         to_return = [self.D_solver, self.D_loss, self.D_real_acc, self.D_fake_acc, 
-            self.D_real_class_acc, self.D_fake_class_acc, self.merged]
+            self.D_real_class_acc, self.D_fake_class_acc]
         return sess.run(to_return,
                     feed_dict={self.real_x: batch_x,
                                self.real_c: batch_c,
@@ -26,7 +26,7 @@ class ACGANModel(object):
                                self.z: z})
     
     def run_G_train_step(self, sess, batch_x, batch_c, z, batch_fake_c):
-        to_return = [self.G_solver, self.G_loss, self.samples, self.probs]
+        to_return = [self.G_solver, self.G_loss, self.samples, self.probs, self.merged]
         return sess.run(to_return,
                     feed_dict={self.real_x: batch_x,
                                self.real_c: batch_c,
@@ -127,6 +127,8 @@ class ACGANModel(object):
     def _add_saver_and_summary(self):
         self.global_step = tf.Variable(-1, name='global_step', trainable=False)
         self.saver = tf.train.Saver()
+        for var in tf.trainable_variables():
+            utils.variable_summaries(var)
         self.merged = tf.summary.merge_all()
         
     

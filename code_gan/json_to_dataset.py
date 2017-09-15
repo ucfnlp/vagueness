@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import math
 import yaml
 import numpy
+import numpy as np
 import codecs
 import operator
 import h5py
@@ -38,6 +39,7 @@ embedding_dim = 300
 maxlen = 50
 batch_size = 128
 val_samples = batch_size * 10
+num_folds = 5
 train_ratio = 0.8
 vague_phrase_threshold = 2
 min_vague_score = 1
@@ -233,47 +235,61 @@ for doc in data['docs']:
 doc_ids = list(doc_ids)
 numpy.random.shuffle(doc_ids)
 train_len = int(train_ratio*len(doc_ids))
-train_doc_ids = doc_ids[:train_len]
-test_doc_ids = doc_ids[train_len:]
 
-# Split into train and test, keeping documents together
-train_indices = []
-test_indices = []
-for i in range(len(sentence_doc_ids)):
-    doc = sentence_doc_ids[i]
-    if doc in train_doc_ids:
-        train_indices.append(i)
-    elif doc in test_doc_ids:
-        test_indices.append(i)
-    else:
-        raise ValueError('Document id was not in either the train set nor the test set')
-train_X = X_padded[train_indices]
-train_Y_word = Y_padded_word[train_indices]
-train_Y_sentence = Y_sentence[train_indices]
-test_X = X_padded[test_indices]
-        
-test_Y_word = Y_padded_word[test_indices]
-test_Y_sentence = Y_sentence[test_indices]
-
-#shuffle
-        
-permutation = numpy.random.permutation(train_X.shape[0])
-train_X = train_X[permutation]
-train_Y_word = train_Y_word[permutation]
-train_Y_sentence = train_Y_sentence[permutation]
-permutation = numpy.random.permutation(test_X.shape[0])
-test_X = test_X[permutation]
-test_Y_word = test_Y_word[permutation]
-test_Y_sentence = test_Y_sentence[permutation]
-
-# Save preprocessed dataset to file
 outfile = h5py.File(dataset_file, 'w')
-outfile.create_dataset('train_X', data=train_X)
-outfile.create_dataset('train_Y_word', data=train_Y_word)
-outfile.create_dataset('train_Y_sentence', data=train_Y_sentence)
-outfile.create_dataset('test_X', data=test_X)
-outfile.create_dataset('test_Y_word', data=test_Y_word)
-outfile.create_dataset('test_Y_sentence', data=test_Y_sentence)
+
+def get_all_except_one(my_list, exclude_idx):
+    return [x for i,x in enumerate(my_list) if i!=exclude_idx]
+
+folds = np.array_split(doc_ids,num_folds)
+for fold_idx, fold in enumerate(folds):
+    train_folds = get_all_except_one(folds, fold_idx)
+    test_fold = fold
+
+    def flatten_list_of_lists(list_of_lists):
+        flatten = lambda l: [item for sublist in l for item in sublist]
+        return flatten(list_of_lists)
+    train_doc_ids = flatten_list_of_lists(train_folds)
+    test_doc_ids = test_fold
+    
+    # Split into train and test, keeping documents together
+    train_indices = []
+    test_indices = []
+    for i in range(len(sentence_doc_ids)):
+        doc = sentence_doc_ids[i]
+        if doc in train_doc_ids:
+            train_indices.append(i)
+        elif doc in test_doc_ids:
+            test_indices.append(i)
+        else:
+            raise ValueError('Document id was not in either the train set nor the test set')
+    train_X = X_padded[train_indices]
+    train_Y_word = Y_padded_word[train_indices]
+    train_Y_sentence = Y_sentence[train_indices]
+    test_X = X_padded[test_indices]
+            
+    test_Y_word = Y_padded_word[test_indices]
+    test_Y_sentence = Y_sentence[test_indices]
+    
+    #shuffle
+            
+    permutation = numpy.random.permutation(train_X.shape[0])
+    train_X = train_X[permutation]
+    train_Y_word = train_Y_word[permutation]
+    train_Y_sentence = train_Y_sentence[permutation]
+    permutation = numpy.random.permutation(test_X.shape[0])
+    test_X = test_X[permutation]
+    test_Y_word = test_Y_word[permutation]
+    test_Y_sentence = test_Y_sentence[permutation]
+    
+    # Save preprocessed dataset to file
+    grp = outfile.create_group('fold' + str(fold_idx))
+    grp.create_dataset('train_X', data=train_X)
+    grp.create_dataset('train_Y_word', data=train_Y_word)
+    grp.create_dataset('train_Y_sentence', data=train_Y_sentence)
+    grp.create_dataset('test_X', data=test_X)
+    grp.create_dataset('test_Y_word', data=test_Y_word)
+    grp.create_dataset('test_Y_sentence', data=test_Y_sentence)
 outfile.flush()
 outfile.close()
 

@@ -24,7 +24,7 @@ dataset_file = '../data/annotated_dataset.h5'
 embedding_weights_file = '../data/embedding_weights.h5'
 dictionary_file = '../data/words.dict'
 # train_variables_file = '../models/tf_enc_dec_variables.npz'
-train_variables_file = '../models/tf_lm_variables (copy).npz'
+train_variables_file = '../models/tf_lm_variables.npz'
 ckpt_dir = '../models/acgan_ckpts'
 gan_variables_file = ckpt_dir + '/tf_acgan_variables_'
 vague_terms_file = '../data/vague_terms'
@@ -78,10 +78,11 @@ with h5py.File(embedding_weights_file, 'r') as hf:
     
 print('loading training and test data')
 with h5py.File(dataset_file, 'r') as data_file:
-    train_x = data_file['train_X'][:]
-    train_y = data_file['train_Y_sentence'][:]
-    test_x = data_file['test_X'][:]
-    test_y = data_file['test_Y_sentence'][:]
+    fold = data_file['fold1']
+    train_x = fold['train_X'][:]
+    train_y = fold['train_Y_sentence'][:]
+    test_x = fold['test_X'][:]
+    test_y = fold['test_Y_sentence'][:]
 print 'Number of training instances: ' + str(train_y[0])
 train_x[train_x == 2] = 0
 train_y[train_y == 2] = 0
@@ -225,7 +226,7 @@ def train(model):
                 batch_z = sample_Z(batch_x.shape[0], FLAGS.LATENT_SIZE)
                 batch_fake_c = sample_C(batch_x.shape[0])
                 for j in range(1):
-                    _, D_loss_curr, real_acc, fake_acc, real_class_acc, fake_class_acc, summary = model.run_D_train_step(
+                    _, D_loss_curr, real_acc, fake_acc, real_class_acc, fake_class_acc = model.run_D_train_step(
                         sess, batch_x, batch_y, batch_z, batch_fake_c)
                 step_ctr += 1
                 if step_ctr == disc_steps:
@@ -233,29 +234,28 @@ def train(model):
                     for j in range(1):
                         batch_z = sample_Z(batch_x.shape[0], FLAGS.LATENT_SIZE)
                         g_batch_fake_c = sample_C(batch_x.shape[0])
-                        _, G_loss_curr, batch_samples, batch_probs = model.run_G_train_step(
+                        _, G_loss_curr, batch_samples, batch_probs, summary = model.run_G_train_step(
                             sess, batch_x, batch_y, batch_z, g_batch_fake_c)
             
-                    if cur_epoch % 1 == 0:
-                        train_writer.add_summary(summary, step)
-                        step += 1
-                        generated_sequences = batch_samples
-                        print('Iter: {}'.format(cur_epoch))
-                        print('Instance ', cur, ' out of ', data_len)
-                        print('D loss: {:.4}'. format(D_loss_curr))
-                        print('G_loss: {:.4}'.format(G_loss_curr))
-                        print('D real acc: ', real_acc, ' D fake acc: ', fake_acc)
-                        print('D real class acc: ', real_class_acc, ' D fake class acc: ', fake_class_acc)
-                        print('Samples', generated_sequences)
-                        print()
-                        for i in range(min(3, len(generated_sequences))):
-                            for j in range(len(generated_sequences[i])):
-                                if generated_sequences[i][j] == 0:
-                                    print '<UNK> ',
-                                else:
-                                    word = d[generated_sequences[i][j]]
-                                    print word + ' ',
-                            print '(' + str(g_batch_fake_c[i]) + ')\n'
+                    train_writer.add_summary(summary, step)
+                    step += 1
+                    generated_sequences = batch_samples
+                    print('Iter: {}'.format(cur_epoch))
+                    print('Instance ', cur, ' out of ', data_len)
+                    print('D loss: {:.4}'. format(D_loss_curr))
+                    print('G_loss: {:.4}'.format(G_loss_curr))
+                    print('D real acc: ', real_acc, ' D fake acc: ', fake_acc)
+                    print('D real class acc: ', real_class_acc, ' D fake class acc: ', fake_class_acc)
+                    print('Samples', generated_sequences)
+                    print()
+                    for i in range(min(3, len(generated_sequences))):
+                        for j in range(len(generated_sequences[i])):
+                            if generated_sequences[i][j] == 0:
+                                print '<UNK> ',
+                            else:
+                                word = d[generated_sequences[i][j]]
+                                print word + ' ',
+                        print '(' + str(g_batch_fake_c[i]) + ')\n'
                      
             if cur_epoch % 1 == 0:
                 save_samples_to_file(generated_sequences, g_batch_fake_c, cur_epoch)

@@ -11,7 +11,6 @@ encoding//code_gan/predict_keras.py=utf-8
 encoding//code_gan/preprocess_unannotated_data.py=utf-8
 encoding//code_gan/test.py=utf-8
 encoding//code_gan/turk_csv_to_json.py=utf-8
-encoding//code_gan/turk_csv_to_json_with_batch_1.py=utf-8
 encoding//code_gru/gru.py=utf-8
 encoding//code_gru/gru_sentence.py=utf-8
 encoding//code_gru/json_to_dataset.py=utf-8

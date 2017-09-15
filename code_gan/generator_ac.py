@@ -42,7 +42,7 @@ def generator(z, c, vague_weights, start_symbol_input):
         
         logits = [tf.matmul(output, W) + b for output in outputs] #TODO add vague vocabulary, and remove class embedding
         weighted_logits = [tf.add(logit, vague_weights) for logit in logits]
-        x = [tf.nn.softmax(logit) for logit in logits] # is this softmaxing over the right dimension? this turns into 3D
+        x = [tf.nn.softmax(logit) for logit in weighted_logits] # is this softmaxing over the right dimension? this turns into 3D
         for i in range(len(x)):
             x[i] = tf.multiply(x[i], u[i])
         return x, samples, probs, u
