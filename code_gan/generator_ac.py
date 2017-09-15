@@ -26,13 +26,26 @@ def generator(z, c, vague_weights, start_symbol_input):
                                   vague_weights=vague_weights)
 #                                   class_embedding=c_embedding)
 
-        samples = tf.stack(samples, axis=1)
+        samples = tf.cast(tf.stack(samples, axis=1), tf.int32)
         probs = tf.stack(probs, axis=1)
+        batch_size = tf.stack([tf.shape(c)[0],])
+        eos = tf.fill(batch_size, 3)
+        eos = tf.reshape(eos, [-1, 1])
+        d=tf.concat([samples,eos],1)
+        B=tf.cast(tf.argmax(tf.cast(tf.equal(d, 3), tf.int32), axis=1), tf.int32)
+        m=tf.sequence_mask(B, tf.shape(samples)[1], dtype=tf.int32)
+        samples=tf.multiply(samples,m)
+        
+        o=tf.reshape(m,[-1,FLAGS.SEQUENCE_LEN,1])
+        n = tf.tile(o,[1,1,FLAGS.VOCAB_SIZE])
+        u=tf.cast(tf.unstack(n,axis=1),tf.float32)
         
         logits = [tf.matmul(output, W) + b for output in outputs] #TODO add vague vocabulary, and remove class embedding
         weighted_logits = [tf.add(logit, vague_weights) for logit in logits]
         x = [tf.nn.softmax(logit) for logit in logits] # is this softmaxing over the right dimension? this turns into 3D
-        return x, samples, probs
+        for i in range(len(x)):
+            x[i] = tf.multiply(x[i], u[i])
+        return x, samples, probs, u
 #     tf.nn.rnn_cell.EmbeddingWrapper
 
 

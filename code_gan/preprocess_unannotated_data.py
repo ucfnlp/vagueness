@@ -8,6 +8,7 @@ import h5py
 import gensim
 from gensim.models.word2vec import Word2Vec
 import cPickle
+import yaml
 
 numpy.random.seed(123)
 from keras.preprocessing.text import Tokenizer
@@ -22,6 +23,7 @@ embedding_file = data_folder + 'GoogleNews-vectors-negative300.bin'
 vague_file = data_folder + 'vague_terms'
 dataset_file = data_folder + 'dataset.h5'
 embedding_weights_file = data_folder + 'embedding_weights.h5'
+annotated_file = data_folder + 'clean_data.json'
  
 vocab_size = 5000
 embedding_dim = 300
@@ -42,6 +44,20 @@ with codecs.open(train_file) as infile:
         words = start_tag + words + end_tag
         sentences.append(' '.join(words))
 print('total number of sentences in train file: %d' % len(sentences))
+
+# get indices of the annotated sentences so that we don't include them
+annotated_sentences = []
+with open(annotated_file) as f:
+    json_str = f.read()
+annotated_data = yaml.safe_load(json_str)
+for doc in annotated_data['docs']:
+    for sent in doc['vague_sentences']:
+        annotated_sentences.append(int(sent['id']))
+if len(annotated_sentences) != len(set(annotated_sentences)):
+    raise Warning('Annotated dataset has duplicates ')
+        
+# remove sentences that were included in annotated dataset
+sentences = [sent for i, sent in enumerate(sentences) if i not in annotated_sentences]
     
 # tokenize, create vocabulary
 tokenizer = Tokenizer(nb_words=vocab_size, filters=' ')

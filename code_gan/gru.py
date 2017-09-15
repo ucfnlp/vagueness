@@ -160,12 +160,11 @@ with tf.Session() as sess:
     tf.add_to_collection('predictions', predictions)
 #     train_writer = tf.summary.FileWriter(summary_file + '/train', sess.graph)
     tf.global_variables_initializer().run()
-#     if args.resume:
-
-    ckpt = tf.train.get_checkpoint_state(ckpt_dir)
-    if ckpt and ckpt.model_checkpoint_path:
-        print ckpt.model_checkpoint_path
-        saver.restore(sess, ckpt.model_checkpoint_path) # restore all variables
+    if args.resume:
+        ckpt = tf.train.get_checkpoint_state(ckpt_dir)
+        if ckpt and ckpt.model_checkpoint_path:
+            print ckpt.model_checkpoint_path
+            saver.restore(sess, ckpt.model_checkpoint_path) # restore all variables
 
     start = global_step.eval() + 1 # get last global_step and start the next one
     print "Start from:", start

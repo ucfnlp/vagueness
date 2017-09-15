@@ -152,7 +152,7 @@ plt.hist(Y_sentence, bins=max_vague_score-min_vague_score, range=(min_vague_scor
 plt.title("Sentence-Level Vagueness Score Distribution")
 plt.xlabel("Score")
 plt.ylabel("Number of Sentences")
-plt.show()
+plt.show(block=False)
 
 
 sorted_vague_phrases = sorted(vague_phrases.items(), key=operator.itemgetter(1), reverse=True)

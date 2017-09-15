@@ -54,7 +54,7 @@ class Sentence(object):
         
     # Used to convert to JSON
     def reprJSON(self):
-        return dict(type=self.type, hit_id=self.hit_id, sentence_str=self.sentence_str, 
+        return dict(type=self.type, id=self.id, hit_id=self.hit_id, sentence_str=self.sentence_str, 
                     scores=self.scores, vague_phrases=self.vague_phrases) 
         
 # Encodes objects into JSON
@@ -74,27 +74,20 @@ for fn in os.listdir(csv_folder):
         with open(csv_folder+'/'+fn) as f:
             turk_data = [{k: v for k, v in row.items()}
                 for row in csv.DictReader(f, skipinitialspace=True)]
-        if not turk_data[0].has_key('Input.docid1'):
-            print ('skipping file because it does not include document id and sentence id')
-            continue
-#             # Reads in the document ID for each sentence
-#             with open(vague_sents_doc_file) as f:
-#                 vague_doc_inidices = f.read().splitlines()
             
         cur_doc = Document()
         sentences = {}
-        
-        # for each hit in csv
-        for i in range(len(turk_data)):
-            # for each of the 5 sentences in this hit
-            for j in range(1,6):
-                idx = str(j)
+            
+        def createVaguePhrases(idx):
+            # for each hit in csv
+            for i in range(len(turk_data)):
                 row = turk_data[i]
                 sent_id = row['Input.sentenceid'+idx]
                 if sentences.has_key(sent_id):
                     cur_sent = sentences[sent_id]
                 else:
                     cur_sent = Sentence()
+                    cur_sent.id = row['Input.sentenceid'+idx]
                     cur_sent.hit_id = row['HITId']
                     cur_sent.doc_id = row['Input.docid'+idx]
                     cur_sent.sentence_str = row['Input.sentence'+idx]
@@ -107,6 +100,14 @@ for fn in os.listdir(csv_folder):
                         phrases = [x.strip().lower() for x in phrases_str.split(',')]
                         for phrase in phrases:
                             cur_sent.vague_phrases[phrase] = cur_sent.vague_phrases.get(phrase, 0) + 1
+
+        if turk_data[0].has_key('Input.docid'):
+            idx = ''
+            createVaguePhrases(idx)
+        if turk_data[0].has_key('Input.docid1'):
+            # for each of the 5 sentences in this hit
+            for idx in range(1,6):
+                createVaguePhrases(str(idx))
 
         
         for sent in sentences.values():

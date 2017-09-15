@@ -71,7 +71,7 @@ class ACGANModel(object):
         
     def _add_acgan(self):
         with tf.variable_scope(tf.get_variable_scope()) as scope:
-            G_sample, self.samples, self.probs = generator(self.z, self.fake_c, self.vague_weights, self.start_symbol_input) #TODO move to generator
+            G_sample, self.samples, self.probs, self.u = generator(self.z, self.fake_c, self.vague_weights, self.start_symbol_input) #TODO move to generator
             self.D_real, self.D_logit_real, self.D_class_logit_real = discriminator(self.real_x)
             tf.get_variable_scope().reuse_variables()
             self.D_fake, self.D_logit_fake, self.D_class_logit_fake = discriminator(G_sample)

@@ -83,6 +83,14 @@ with h5py.File(dataset_file, 'r') as data_file:
     test_x = data_file['test_X'][:]
     test_y = data_file['test_Y_sentence'][:]
 print 'Number of training instances: ' + str(train_y[0])
+train_x[train_x == 2] = 0
+train_y[train_y == 2] = 0
+test_x[test_x == 2] = 0
+test_y[test_y == 2] = 0
+train_x[train_x == 3] = 0
+train_y[train_y == 3] = 0
+test_x[test_x == 3] = 0
+test_y[test_y == 3] = 0
 
 print('loading dictionary')
 d = {}
@@ -153,6 +161,24 @@ def save_samples_to_file(generated_sequences, batch_fake_c, epoch):
                     word = d[generated_sequences[i][j]]
                     f.write(word + ' ')
             f.write('(' + str(batch_fake_c[i]) + ')\n\n')
+
+def print_metrics(y_true, y_pred):
+    print 'Performance Metrics\n-------------------\n'
+    print ('Accuracy', metrics.accuracy_score(y_true, y_pred))
+    print ''
+    report = metrics.classification_report(y_true,y_pred)
+    print report + '\n'
+    confusion_matrix = metrics.confusion_matrix(y_true, y_pred)
+    print 'Confusion Matrix\n-------------------\n'
+    print '\t\t',
+    for i in range(len(confusion_matrix)):
+        print str(i) + '\t',
+    print '\n'
+    for i in range(len(confusion_matrix)):
+        print str(i) + '\t\t',
+        for j in range(len(confusion_matrix[i])):
+            print str(confusion_matrix[i,j]) + '\t',
+        print ''
             
 def sample_Z(m, n):
     return np.zeros((m, n))
@@ -193,38 +219,46 @@ def train(model):
         xaxis = 0
         step = 0
         for cur_epoch in range(start, FLAGS.EPOCHS):
+            disc_steps = 3
+            step_ctr = 0
             for batch_x, batch_y, cur, data_len in batch_generator(train_x, train_y):
                 batch_z = sample_Z(batch_x.shape[0], FLAGS.LATENT_SIZE)
                 batch_fake_c = sample_C(batch_x.shape[0])
-                _, D_loss_curr, real_acc, fake_acc, real_class_acc, fake_class_acc, summary = model.run_D_train_step(
-                    sess, batch_x, batch_y, batch_z, batch_fake_c)
                 for j in range(1):
-                    _, G_loss_curr, batch_samples, batch_probs = model.run_G_train_step(
+                    _, D_loss_curr, real_acc, fake_acc, real_class_acc, fake_class_acc, summary = model.run_D_train_step(
                         sess, batch_x, batch_y, batch_z, batch_fake_c)
-        
-                if cur_epoch % 1 == 0:
-                    train_writer.add_summary(summary, step)
-                    step += 1
-                    generated_sequences = batch_samples
-                    print('Iter: {}'.format(cur_epoch))
-                    print('Instance ', cur, ' out of ', data_len)
-                    print('D loss: {:.4}'. format(D_loss_curr))
-                    print('G_loss: {:.4}'.format(G_loss_curr))
-                    print('D real acc: ', real_acc, ' D fake acc: ', fake_acc)
-                    print('D real class acc: ', real_class_acc, ' D fake class acc: ', fake_class_acc)
-                    print('Samples', generated_sequences)
-                    print()
-                    for i in range(min(3, len(generated_sequences))):
-                        for j in range(len(generated_sequences[i])):
-                            if generated_sequences[i][j] == 0:
-                                print '<UNK> ',
-                            else:
-                                word = d[generated_sequences[i][j]]
-                                print word + ' ',
-                        print '(' + str(batch_fake_c[i]) + ')\n'
-                    
+                step_ctr += 1
+                if step_ctr == disc_steps:
+                    step_ctr = 0
+                    for j in range(1):
+                        batch_z = sample_Z(batch_x.shape[0], FLAGS.LATENT_SIZE)
+                        g_batch_fake_c = sample_C(batch_x.shape[0])
+                        _, G_loss_curr, batch_samples, batch_probs = model.run_G_train_step(
+                            sess, batch_x, batch_y, batch_z, g_batch_fake_c)
+            
+                    if cur_epoch % 1 == 0:
+                        train_writer.add_summary(summary, step)
+                        step += 1
+                        generated_sequences = batch_samples
+                        print('Iter: {}'.format(cur_epoch))
+                        print('Instance ', cur, ' out of ', data_len)
+                        print('D loss: {:.4}'. format(D_loss_curr))
+                        print('G_loss: {:.4}'.format(G_loss_curr))
+                        print('D real acc: ', real_acc, ' D fake acc: ', fake_acc)
+                        print('D real class acc: ', real_class_acc, ' D fake class acc: ', fake_class_acc)
+                        print('Samples', generated_sequences)
+                        print()
+                        for i in range(min(3, len(generated_sequences))):
+                            for j in range(len(generated_sequences[i])):
+                                if generated_sequences[i][j] == 0:
+                                    print '<UNK> ',
+                                else:
+                                    word = d[generated_sequences[i][j]]
+                                    print word + ' ',
+                            print '(' + str(g_batch_fake_c[i]) + ')\n'
+                     
             if cur_epoch % 1 == 0:
-                save_samples_to_file(generated_sequences, batch_fake_c, cur_epoch)
+                save_samples_to_file(generated_sequences, g_batch_fake_c, cur_epoch)
             
             print 'saving model to file:'
     #         global_step.assign(cur_epoch).eval() # set and update(eval) global_step with index, cur_epoch
@@ -239,7 +273,8 @@ def train(model):
             
         train_writer.close()
             
-        save_samples_to_file(generated_sequences, batch_fake_c, cur_epoch)
+#         save_samples_to_file(generated_sequences, batch_fake_c, cur_epoch)
+        
     
     
 def test(model):
@@ -261,8 +296,7 @@ def test(model):
             print('Instance ', cur, ' out of ', data_len)
         predictions = np.concatenate(predictions)
         predictions_indices = np.argmax(predictions, axis=1)
-        print ('Accuracy', metrics.accuracy_score(test_y, predictions_indices))
-        print metrics.classification_report(test_y,predictions_indices)
+        print_metrics(test_y, predictions_indices)
         a=1
         
     
@@ -272,7 +306,7 @@ def main(unused_argv):
                         action="store_true")
     args = parser.parse_args()
     model = acgan_model.ACGANModel(vague_terms, params)
-    
+    args.train = True
     if args.train:
         train(model)
     else:
