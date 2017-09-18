@@ -55,7 +55,10 @@ class ACGANModel(object):
         self.global_step.assign(value).eval()
         
     def _add_placeholder(self):
-        self.real_x = tf.placeholder(tf.float32, shape=[None, FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE])
+        if FLAGS.SAMPLE:
+            self.real_x = tf.placeholder(tf.int32, shape=[None, FLAGS.SEQUENCE_LEN])
+        else:
+            self.real_x = tf.placeholder(tf.float32, shape=[None, FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE])
         self.real_c = tf.placeholder(tf.int32, [None,], 'class')
         self.fake_c = tf.placeholder(tf.int32, [None,], 'class')
         self.z = tf.placeholder(tf.float32, [None, FLAGS.LATENT_SIZE], name='z')
@@ -68,14 +71,19 @@ class ACGANModel(object):
             vague_weights = tf.multiply(b,tf.cast(tf.reshape(self.fake_c - 1, [-1,1]),tf.float32))
             return vague_weights
         self.vague_weights = create_vague_weights(self.vague_terms, self.fake_c)
+        self.embedding_matrix = tf.Variable(tf.random_normal([FLAGS.VOCAB_SIZE, FLAGS.EMBEDDING_SIZE]), name='embedding_matrix')
         
     def _add_acgan(self):
         with tf.variable_scope(tf.get_variable_scope()) as scope:
-            G_sample, self.samples, self.probs, self.u = generator(self.z, self.fake_c, self.vague_weights, self.start_symbol_input) #TODO move to generator
-            self.D_real, self.D_logit_real, self.D_class_logit_real = discriminator(self.real_x)
+            G_sample, self.samples, self.probs, self.u = generator(self.z, self.fake_c, self.vague_weights, self.start_symbol_input, self.embedding_matrix) #TODO move to generator
+            self.D_real, self.D_logit_real, self.D_class_logit_real = discriminator(self.real_x, self.embedding_matrix)
             tf.get_variable_scope().reuse_variables()
-            self.D_fake, self.D_logit_fake, self.D_class_logit_fake = discriminator(G_sample)
-            
+            if FLAGS.SAMPLE:
+                self.D_fake, self.D_logit_fake, self.D_class_logit_fake = discriminator(self.samples, self.embedding_matrix)
+            else:
+                self.D_fake, self.D_logit_fake, self.D_class_logit_fake = discriminator(G_sample, self.embedding_matrix)
+        a=0
+        
     def _add_loss(self):
         self.D_real_acc = tf.cast(utils.tf_count(tf.round(self.D_real), 1), tf.float32) / tf.cast(
             tf.shape(self.D_real)[0], tf.float32)
@@ -115,6 +123,8 @@ class ACGANModel(object):
         tvars = tf.trainable_variables()
         theta_D = [var for var in tvars if 'D_' in var.name]
         theta_G = [var for var in tvars if 'G_' in var.name]
+        theta_D.append(self.embedding_matrix)
+        theta_G.append(self.embedding_matrix)
         self.D_solver = tf.train.AdamOptimizer().minimize(self.D_loss, var_list=theta_D)
         self.G_solver = tf.train.AdamOptimizer().minimize(self.G_loss, var_list=theta_G)
         for var in theta_D:

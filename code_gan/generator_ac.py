@@ -6,7 +6,7 @@ import utils
 
 FLAGS = tf.app.flags.FLAGS
 
-def generator(z, c, vague_weights, start_symbol_input):
+def generator(z, c, vague_weights, start_symbol_input, embedding_matrix):
     with tf.variable_scope("G_"):
         cell = utils.create_cell()
 #         cell = tf.contrib.rnn.DropoutWrapper(cell, output_keep_prob=0.5)
@@ -23,7 +23,8 @@ def generator(z, c, vague_weights, start_symbol_input):
                                   feed_previous=True,
                                   update_embedding_for_previous=True,
                                   sample_from_distribution=True,
-                                  vague_weights=vague_weights)
+                                  vague_weights=vague_weights,
+                                  embedding_matrix=embedding_matrix)
 #                                   class_embedding=c_embedding)
 
         samples = tf.cast(tf.stack(samples, axis=1), tf.int32)

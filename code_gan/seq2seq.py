@@ -297,7 +297,8 @@ def embedding_rnn_decoder(decoder_inputs,
                           scope=None,
                           sample_from_distribution=False,
                           class_embedding=None,
-                          vague_weights=None):
+                          vague_weights=None,
+                          embedding_matrix=None):
   """RNN decoder with embedding and a pure-decoding option.
 
   Args:
@@ -346,7 +347,10 @@ def embedding_rnn_decoder(decoder_inputs,
       proj_biases = ops.convert_to_tensor(output_projection[1], dtype=dtype)
       proj_biases.get_shape().assert_is_compatible_with([num_symbols])
 
-    embedding = variable_scope.get_variable("embedding",
+    if embedding_matrix is not None:
+        embedding = embedding_matrix
+    else:
+        embedding = variable_scope.get_variable("embedding",
                                             [num_symbols, embedding_size])
     if sample_from_distribution:
         loop_function = _extract_sample_from_distribution_and_embed(

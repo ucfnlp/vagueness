@@ -14,6 +14,7 @@ import utils
 import acgan_model
 import argparse
 from sklearn import metrics
+from scipy.ndimage.interpolation import shift
 
 prediction_file = '../predictions/predictions_acgan'
 y_file = 'y_acgan.txt'
@@ -57,7 +58,8 @@ tf.app.flags.DEFINE_string('CELL_TYPE', 'GRU',
                             'Which RNN cell for the RNNs.')
 tf.app.flags.DEFINE_string('MODE', 'TRAIN',
                             'Whether to run in train or test mode.')
-
+tf.app.flags.DEFINE_boolean('SAMPLE', True,
+                            'Whether to sample from the generator distribution to get fake samples.')
 '''
 --------------------------------
 
@@ -65,12 +67,22 @@ LOAD DATA
 
 --------------------------------
 '''
-
+if FLAGS.SAMPLE:
+    ckpt_dir = '../models/acgan_sample_ckpts'
+    
 if not os.path.exists(ckpt_dir):
     os.makedirs(ckpt_dir)
 
 print('loading model parameters')
 params = np.load(train_variables_file)
+params_dict = {}
+for key in params.keys():
+    params_dict[key] = params[key]
+params.close()
+params = params_dict
+pretrained_embedding_matrix = params[param_names.GAN_PARAMS.EMBEDDING[0]]
+pretrained_embedding_matrix[0] = np.zeros(pretrained_embedding_matrix[0].shape)
+params[param_names.GAN_PARAMS.EMBEDDING[0]] = pretrained_embedding_matrix
 
 print('loading embedding weights')
 with h5py.File(embedding_weights_file, 'r') as hf:
@@ -84,14 +96,10 @@ with h5py.File(dataset_file, 'r') as data_file:
     test_x = fold['test_X'][:]
     test_y = fold['test_Y_sentence'][:]
 print 'Number of training instances: ' + str(train_y[0])
-train_x[train_x == 2] = 0
-train_y[train_y == 2] = 0
-test_x[test_x == 2] = 0
-test_y[test_y == 2] = 0
 train_x[train_x == 3] = 0
-train_y[train_y == 3] = 0
 test_x[test_x == 3] = 0
-test_y[test_y == 3] = 0
+train_x = shift(train_x, [0,-1], cval=0)
+test_x = shift(test_x, [0,-1], cval=0)
 
 print('loading dictionary')
 d = {}
@@ -136,11 +144,15 @@ def batch_generator(x, y, batch_size=FLAGS.BATCH_SIZE):
     data_len = x.shape[0]
     for i in range(0, data_len, batch_size):
         x_batch = x[i:min(i+batch_size,data_len)]
-        x_batch_transpose = np.transpose(x_batch)
-        x_batch_one_hot = np.eye(FLAGS.VOCAB_SIZE)[x_batch_transpose.astype(int)]
-        x_batch_one_hot_reshaped = x_batch_one_hot.reshape([-1,FLAGS.SEQUENCE_LEN,FLAGS.VOCAB_SIZE])
+        if not FLAGS.SAMPLE:
+            x_batch_transpose = np.transpose(x_batch)
+            x_batch_one_hot = np.eye(FLAGS.VOCAB_SIZE)[x_batch_transpose.astype(int)]
+            x_batch_one_hot_reshaped = x_batch_one_hot.reshape([-1,FLAGS.SEQUENCE_LEN,FLAGS.VOCAB_SIZE])
         y_batch = y[i:min(i+batch_size,data_len)]
-        yield x_batch_one_hot_reshaped, y_batch, i, data_len
+        if not FLAGS.SAMPLE:
+            yield x_batch_one_hot_reshaped, y_batch, i, data_len
+        else:
+            yield x_batch, y_batch, i, data_len
 
 '''
 --------------------------------
@@ -306,7 +318,7 @@ def main(unused_argv):
                         action="store_true")
     args = parser.parse_args()
     model = acgan_model.ACGANModel(vague_terms, params)
-    args.train = True
+#     args.train = True
     if args.train:
         train(model)
     else:
