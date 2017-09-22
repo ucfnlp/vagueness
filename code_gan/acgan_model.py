@@ -15,6 +15,7 @@ class ACGANModel(object):
         """ init the model with hyper-parameters etc """
         self.vague_terms = tf.constant(vague_terms, dtype=tf.float32)
         self.params = params
+        self.is_built = False
         
     def run_D_train_step(self, sess, batch_x, batch_c, z, batch_fake_c):
         to_return = [self.D_solver, self.D_loss, self.D_real_acc, self.D_fake_acc, 
@@ -150,6 +151,7 @@ class ACGANModel(object):
         if include_optimizer:
             self._add_optimizer()
         self._add_saver_and_summary()
+        self.is_built = True
 
     
 
