@@ -1,6 +1,11 @@
+from __future__ import print_function
+
 import numpy as np
 import tensorflow as tf
 from tensorflow.contrib.rnn import BasicRNNCell, BasicLSTMCell, GRUCell
+import sys
+from sklearn import metrics
+import os
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -47,3 +52,82 @@ def variable_summaries(var):
     tf.summary.scalar('max ' + var.name, tf.reduce_max(var))
     tf.summary.scalar('min ' + var.name, tf.reduce_min(var))
     tf.summary.histogram('histogram ' + var.name, var)
+
+def print_metrics(y_true, y_pred):
+    print ('Performance Metrics\n-------------------\n')
+    print ('Accuracy', metrics.accuracy_score(y_true, y_pred))
+    print ('')
+    report = metrics.classification_report(y_true,y_pred)
+    print (report + '\n')
+    confusion_matrix = metrics.confusion_matrix(y_true, y_pred)
+    print ('Confusion Matrix\n-------------------\n')
+    print ('\t\t',end='')
+    for i in range(len(confusion_matrix)):
+        print (str(i) + '\t',end='')
+    print ('\n')
+    for i in range(len(confusion_matrix)):
+        print (str(i) + '\t\t',end='')
+        for j in range(len(confusion_matrix[i])):
+            print (str(confusion_matrix[i,j]) + '\t',end='')
+        print ('')
+        
+class Progress_Bar:
+    @staticmethod
+    def startProgress(title):
+        global progress_x
+        sys.stdout.write(title + ": [" + "-"*40 + "]" + chr(8)*41)
+        sys.stdout.flush()
+        progress_x = 0
+    @staticmethod
+    def progress(x):
+        global progress_x
+        x = int(x * 40 // 100)
+        sys.stdout.write("#" * (x - progress_x))
+        sys.stdout.flush()
+        progress_x = x
+    @staticmethod
+    def endProgress():
+        sys.stdout.write("#" * (40 - progress_x) + "]\n")
+        sys.stdout.flush()
+        
+def batch_generator(x, y, batch_size=64, one_hot=False):
+    data_len = x.shape[0]
+    for i in range(0, data_len, batch_size):
+        x_batch = x[i:min(i+batch_size,data_len)]
+        # If giving the discriminator the vocab distribution, then we need to use a 1-hot representation
+        if one_hot:
+            x_batch_transpose = np.transpose(x_batch)
+            x_batch_one_hot = np.eye(FLAGS.VOCAB_SIZE)[x_batch_transpose.astype(int)]
+            x_batch_one_hot_reshaped = x_batch_one_hot.reshape([-1,FLAGS.SEQUENCE_LEN,FLAGS.VOCAB_SIZE])
+        y_batch = y[i:min(i+batch_size,data_len)]
+        if one_hot:
+            yield x_batch_one_hot_reshaped, y_batch, i, data_len
+        else:
+            yield x_batch, y_batch, i, data_len
+        
+def create_dirs(dir, num_folds):
+    if not os.path.exists(dir):
+        os.makedirs(dir)
+    for fold_num in range(num_folds):
+        fold_dir = dir + '/' + str(fold_num)
+        if not os.path.exists(fold_dir):
+            os.makedirs(fold_dir)
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        

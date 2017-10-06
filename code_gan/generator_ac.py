@@ -6,13 +6,21 @@ import utils
 
 FLAGS = tf.app.flags.FLAGS
 
-def generator(z, c, vague_weights, start_symbol_input, embedding_matrix):
+def generator(z, c, initial_vague_terms, dims, start_symbol_input, embedding_matrix):
     with tf.variable_scope("G_"):
         cell = utils.create_cell()
 #         cell = tf.contrib.rnn.DropoutWrapper(cell, output_keep_prob=0.5)
         
         W = tf.Variable(tf.random_normal([FLAGS.LATENT_SIZE, FLAGS.VOCAB_SIZE]), name='W')    
         b = tf.Variable(tf.random_normal([FLAGS.VOCAB_SIZE]), name='b')    
+        
+        vague_terms = tf.Variable(initial_vague_terms, dtype=tf.float32, name='vague_terms')
+        def create_vague_weights(vague_terms, c):
+            a = tf.tile(vague_terms, dims)
+            b = tf.reshape(a,[-1,FLAGS.VOCAB_SIZE])
+            vague_weights = tf.multiply(b,tf.cast(tf.reshape(c - 1, [-1,1]),tf.float32))
+            return vague_weights
+        vague_weights = create_vague_weights(vague_terms, c)
         
         outputs, states, samples, probs = embedding_rnn_decoder(start_symbol_input,   # is this ok? I'm not sure what giving 0 inputs does (although it should be completely ignoring inputs)
                                   z,

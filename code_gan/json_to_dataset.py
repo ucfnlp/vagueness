@@ -41,6 +41,7 @@ batch_size = 128
 val_samples = batch_size * 10
 num_folds = 5
 train_ratio = 0.8
+validation_ratio = 0.1
 vague_phrase_threshold = 2
 min_vague_score = 1
 max_vague_score = 5
@@ -235,6 +236,7 @@ for doc in data['docs']:
 doc_ids = list(doc_ids)
 numpy.random.shuffle(doc_ids)
 train_len = int(train_ratio*len(doc_ids))
+val_len = int(validation_ratio*len(doc_ids))
 
 outfile = h5py.File(dataset_file, 'w')
 
@@ -249,16 +251,22 @@ for fold_idx, fold in enumerate(folds):
     def flatten_list_of_lists(list_of_lists):
         flatten = lambda l: [item for sublist in l for item in sublist]
         return flatten(list_of_lists)
-    train_doc_ids = flatten_list_of_lists(train_folds)
+    train_val_doc_ids = flatten_list_of_lists(train_folds)
+    np.random.shuffle(train_val_doc_ids)
+    val_doc_ids = train_val_doc_ids[:val_len]
+    train_doc_ids = train_val_doc_ids[val_len:]
     test_doc_ids = test_fold
     
     # Split into train and test, keeping documents together
     train_indices = []
+    val_indices = []
     test_indices = []
     for i in range(len(sentence_doc_ids)):
         doc = sentence_doc_ids[i]
         if doc in train_doc_ids:
             train_indices.append(i)
+        elif doc in val_doc_ids:
+            val_indices.append(i)
         elif doc in test_doc_ids:
             test_indices.append(i)
         else:
@@ -266,8 +274,10 @@ for fold_idx, fold in enumerate(folds):
     train_X = X_padded[train_indices]
     train_Y_word = Y_padded_word[train_indices]
     train_Y_sentence = Y_sentence[train_indices]
+    val_X = X_padded[val_indices]
+    val_Y_word = Y_padded_word[val_indices]
+    val_Y_sentence = Y_sentence[val_indices]
     test_X = X_padded[test_indices]
-            
     test_Y_word = Y_padded_word[test_indices]
     test_Y_sentence = Y_sentence[test_indices]
     
@@ -277,6 +287,10 @@ for fold_idx, fold in enumerate(folds):
     train_X = train_X[permutation]
     train_Y_word = train_Y_word[permutation]
     train_Y_sentence = train_Y_sentence[permutation]
+    permutation = numpy.random.permutation(val_X.shape[0])
+    val_X = val_X[permutation]
+    val_Y_word = val_Y_word[permutation]
+    val_Y_sentence = val_Y_sentence[permutation]
     permutation = numpy.random.permutation(test_X.shape[0])
     test_X = test_X[permutation]
     test_Y_word = test_Y_word[permutation]
@@ -287,6 +301,9 @@ for fold_idx, fold in enumerate(folds):
     grp.create_dataset('train_X', data=train_X)
     grp.create_dataset('train_Y_word', data=train_Y_word)
     grp.create_dataset('train_Y_sentence', data=train_Y_sentence)
+    grp.create_dataset('val_X', data=val_X)
+    grp.create_dataset('val_Y_word', data=val_Y_word)
+    grp.create_dataset('val_Y_sentence', data=val_Y_sentence)
     grp.create_dataset('test_X', data=test_X)
     grp.create_dataset('test_Y_word', data=test_Y_word)
     grp.create_dataset('test_Y_sentence', data=test_Y_sentence)

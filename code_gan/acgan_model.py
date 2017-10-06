@@ -13,7 +13,7 @@ class ACGANModel(object):
     
     def __init__(self, vague_terms, params):
         """ init the model with hyper-parameters etc """
-        self.vague_terms = tf.constant(vague_terms, dtype=tf.float32)
+        self.vague_terms = vague_terms
         self.params = params
         self.is_built = False
         
@@ -64,19 +64,13 @@ class ACGANModel(object):
         self.fake_c = tf.placeholder(tf.int32, [None,], 'class')
         self.z = tf.placeholder(tf.float32, [None, FLAGS.LATENT_SIZE], name='z')
         self.dims = tf.stack([tf.shape(self.fake_c)[0],])
-        self.start_symbol_input = [tf.fill(self.dims, start_symbol_index) for i in xrange(FLAGS.SEQUENCE_LEN)]
+        self.start_symbol_input = [tf.fill(self.dims, start_symbol_index) for i in range(FLAGS.SEQUENCE_LEN)]
         
-        def create_vague_weights(vague_terms, fake_c):
-            a = tf.tile(vague_terms, self.dims)
-            b = tf.reshape(a,[-1,FLAGS.VOCAB_SIZE])
-            vague_weights = tf.multiply(b,tf.cast(tf.reshape(self.fake_c - 1, [-1,1]),tf.float32))
-            return vague_weights
-        self.vague_weights = create_vague_weights(self.vague_terms, self.fake_c)
         self.embedding_matrix = tf.Variable(tf.random_normal([FLAGS.VOCAB_SIZE, FLAGS.EMBEDDING_SIZE]), name='embedding_matrix')
         
     def _add_acgan(self):
         with tf.variable_scope(tf.get_variable_scope()) as scope:
-            G_sample, self.samples, self.probs, self.u = generator(self.z, self.fake_c, self.vague_weights, self.start_symbol_input, self.embedding_matrix) #TODO move to generator
+            G_sample, self.samples, self.probs, self.u = generator(self.z, self.fake_c, self.vague_terms, self.dims, self.start_symbol_input, self.embedding_matrix) #TODO move to generator
             self.D_real, self.D_logit_real, self.D_class_logit_real = discriminator(self.real_x, self.embedding_matrix)
             tf.get_variable_scope().reuse_variables()
             if FLAGS.SAMPLE:
@@ -130,10 +124,10 @@ class ACGANModel(object):
         self.G_solver = tf.train.AdamOptimizer().minimize(self.G_loss, var_list=theta_G)
         for var in theta_D:
             utils.variable_summaries(var) 
-            print var
+            print (var)
         for var in theta_G:
             utils.variable_summaries(var) 
-            print var
+            print (var)
         
     def _add_saver_and_summary(self):
         self.global_step = tf.Variable(-1, name='global_step', trainable=False)
