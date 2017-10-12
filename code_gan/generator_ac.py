@@ -6,13 +6,13 @@ import utils
 
 FLAGS = tf.app.flags.FLAGS
 
-def generator(z, c, initial_vague_terms, dims, start_symbol_input, embedding_matrix):
+def generator(z, c, initial_vague_terms, dims, start_symbol_input, embedding_matrix, keep_prob):
     with tf.variable_scope("G_"):
-        cell = utils.create_cell()
+        cell = utils.create_cell(keep_prob)
 #         cell = tf.contrib.rnn.DropoutWrapper(cell, output_keep_prob=0.5)
         
-        W = tf.Variable(tf.random_normal([FLAGS.LATENT_SIZE, FLAGS.VOCAB_SIZE]), name='W')    
-        b = tf.Variable(tf.random_normal([FLAGS.VOCAB_SIZE]), name='b')    
+        W = tf.Variable(tf.random_normal([FLAGS.LATENT_SIZE, FLAGS.VOCAB_SIZE]), name='output_weights')    
+        b = tf.Variable(tf.random_normal([FLAGS.VOCAB_SIZE]), name='output_biases')    
         
         vague_terms = tf.Variable(initial_vague_terms, dtype=tf.float32, name='vague_terms')
         def create_vague_weights(vague_terms, c):
@@ -55,7 +55,6 @@ def generator(z, c, initial_vague_terms, dims, start_symbol_input, embedding_mat
         for i in range(len(x)):
             x[i] = tf.multiply(x[i], u[i])
         return x, samples, probs, u
-#     tf.nn.rnn_cell.EmbeddingWrapper
 
 
 

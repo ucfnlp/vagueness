@@ -33,6 +33,7 @@ def load_annotated_data(fold_num=0):
     train_x = shift(train_x, [0,-1], cval=0)
     val_x = shift(val_x, [0,-1], cval=0)
     test_x = shift(test_x, [0,-1], cval=0)
+    
             
 #     print train_x
 #     for i in range(min(5, len(train_x))):

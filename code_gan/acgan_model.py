@@ -24,7 +24,8 @@ class ACGANModel(object):
                     feed_dict={self.real_x: batch_x,
                                self.real_c: batch_c,
                                self.fake_c: batch_fake_c,
-                               self.z: z})
+                               self.z: z,
+                               self.keep_prob: 0.5})
     
     def run_G_train_step(self, sess, batch_x, batch_c, z, batch_fake_c):
         to_return = [self.G_solver, self.G_loss, self.samples, self.probs, self.merged]
@@ -32,16 +33,19 @@ class ACGANModel(object):
                     feed_dict={self.real_x: batch_x,
                                self.real_c: batch_c,
                                self.fake_c: batch_fake_c,
-                               self.z: z})
+                               self.z: z,
+                               self.keep_prob: 0.5})
         
     def run_test(self, sess, batch_x):
         to_return = self.D_class_logit_real
         return sess.run(to_return,
-                        feed_dict={self.real_x: batch_x})
+                        feed_dict={self.real_x: batch_x,
+                               self.keep_prob: 1})
         
     def run_samples(self, sess, batch_fake_c, batch_z):
         return sess.run(self.samples, feed_dict={self.fake_c: batch_fake_c,
-                                                 self.z: batch_z})
+                                                 self.z: batch_z,
+                                                 self.keep_prob: 1})
         
     def get_variables(self, sess):
         return sess.run(tf.trainable_variables())
@@ -67,16 +71,21 @@ class ACGANModel(object):
         self.start_symbol_input = [tf.fill(self.dims, start_symbol_index) for i in range(FLAGS.SEQUENCE_LEN)]
         
         self.embedding_matrix = tf.Variable(tf.random_normal([FLAGS.VOCAB_SIZE, FLAGS.EMBEDDING_SIZE]), name='embedding_matrix')
+        self.keep_prob = tf.placeholder(tf.float32)
         
     def _add_acgan(self):
         with tf.variable_scope(tf.get_variable_scope()) as scope:
-            G_sample, self.samples, self.probs, self.u = generator(self.z, self.fake_c, self.vague_terms, self.dims, self.start_symbol_input, self.embedding_matrix) #TODO move to generator
-            self.D_real, self.D_logit_real, self.D_class_logit_real = discriminator(self.real_x, self.embedding_matrix)
+            G_sample, self.samples, self.probs, self.u = generator(self.z, self.fake_c, self.vague_terms, self.dims,
+                 self.start_symbol_input, self.embedding_matrix, self.keep_prob) #TODO move to generator
+            self.D_real, self.D_logit_real, self.D_class_logit_real = discriminator(self.real_x, 
+                 self.embedding_matrix, self.keep_prob)
             tf.get_variable_scope().reuse_variables()
             if FLAGS.SAMPLE:
-                self.D_fake, self.D_logit_fake, self.D_class_logit_fake = discriminator(self.samples, self.embedding_matrix)
+                self.D_fake, self.D_logit_fake, self.D_class_logit_fake = discriminator(self.samples,
+                     self.embedding_matrix, self.keep_prob)
             else:
-                self.D_fake, self.D_logit_fake, self.D_class_logit_fake = discriminator(G_sample, self.embedding_matrix)
+                self.D_fake, self.D_logit_fake, self.D_class_logit_fake = discriminator(G_sample,
+                     self.embedding_matrix, self.keep_prob)
         a=0
         
     def _add_loss(self):
@@ -103,6 +112,16 @@ class ACGANModel(object):
         G_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
             logits=self.D_logit_fake, labels=tf.ones_like(self.D_logit_fake)))
         self.G_loss = D_loss_class_fake + G_loss_fake
+        
+        tvars   = tf.trainable_variables() 
+        theta_D = [var for var in tvars if 'D_' in var.name]
+        theta_G = [var for var in tvars if 'G_' in var.name]
+        theta_D.append(self.embedding_matrix)
+        theta_G.append(self.embedding_matrix)
+        D_lossL2 = tf.add_n([ tf.nn.l2_loss(v) for v in theta_D ]) * 0.00000001
+        G_lossL2 = tf.add_n([ tf.nn.l2_loss(v) for v in theta_G ]) * 0.00000001
+        self.D_loss += D_lossL2
+        self.G_loss += G_lossL2
         
     def _add_assignment_ops(self):
         tvars = tf.trainable_variables()
@@ -131,7 +150,6 @@ class ACGANModel(object):
         
     def _add_saver_and_summary(self):
         self.global_step = tf.Variable(-1, name='global_step', trainable=False)
-        self.saver = tf.train.Saver()
         for var in tf.trainable_variables():
             utils.variable_summaries(var)
         self.merged = tf.summary.merge_all()

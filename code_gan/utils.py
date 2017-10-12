@@ -9,7 +9,7 @@ import os
 
 FLAGS = tf.app.flags.FLAGS
 
-def create_cell(reuse=False):
+def create_cell(keep_prob, reuse=False):
     if FLAGS.CELL_TYPE == 'LSTM':
         cell = BasicLSTMCell(num_units=FLAGS.LATENT_SIZE, activation=tf.nn.tanh,
                               state_is_tuple=False, reuse=reuse)
@@ -17,6 +17,7 @@ def create_cell(reuse=False):
         cell = BasicRNNCell(num_units=FLAGS.LATENT_SIZE, activation=tf.nn.tanh, reuse=reuse)
     elif FLAGS.CELL_TYPE == 'GRU':
         cell = GRUCell(num_units=FLAGS.LATENT_SIZE, activation=tf.nn.tanh, reuse=reuse)
+    cell = tf.contrib.rnn.DropoutWrapper(cell, output_keep_prob=keep_prob, seed=FLAGS.RANDOM_SEED)
     return cell
 
 def get_variable_by_name(tvars, name):
@@ -90,15 +91,30 @@ class Progress_Bar:
         sys.stdout.write("#" * (40 - progress_x) + "]\n")
         sys.stdout.flush()
         
+def create_leaky_one_hot_table():
+    epsilon = 0.0001
+    I = np.eye(FLAGS.VOCAB_SIZE)
+    I_excluding_first_row = I[1:,:]     # exclude first row, which is padding
+                                        # we don't want to leak padding because the generator creates
+                                        # perfect one-hot padding at end of sentence
+    
+    # add a small probability for each possible word in training set
+    I_excluding_first_row[I_excluding_first_row == 0] = epsilon
+    I_excluding_first_row[I_excluding_first_row == 0] = 1 - (epsilon * FLAGS.VOCAB_SIZE)
+    return I
+        
 def batch_generator(x, y, batch_size=64, one_hot=False):
+    one_hot_table = create_leaky_one_hot_table()
     data_len = x.shape[0]
     for i in range(0, data_len, batch_size):
         x_batch = x[i:min(i+batch_size,data_len)]
         # If giving the discriminator the vocab distribution, then we need to use a 1-hot representation
         if one_hot:
+            x_batch = x_batch.astype(float)
             x_batch_transpose = np.transpose(x_batch)
-            x_batch_one_hot = np.eye(FLAGS.VOCAB_SIZE)[x_batch_transpose.astype(int)]
+            x_batch_one_hot = one_hot_table[x_batch_transpose.astype(int)]
             x_batch_one_hot_reshaped = x_batch_one_hot.reshape([-1,FLAGS.SEQUENCE_LEN,FLAGS.VOCAB_SIZE])
+            
         y_batch = y[i:min(i+batch_size,data_len)]
         if one_hot:
             yield x_batch_one_hot_reshaped, y_batch, i, data_len

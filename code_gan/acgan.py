@@ -48,10 +48,12 @@ tf.app.flags.DEFINE_string('CELL_TYPE', 'GRU',
                             'Which RNN cell for the RNNs.')
 tf.app.flags.DEFINE_string('MODE', 'TRAIN',
                             'Whether to run in train or test mode.')
-tf.app.flags.DEFINE_boolean('SAMPLE', True,
+tf.app.flags.DEFINE_boolean('SAMPLE', False,
                             'Whether to sample from the generator distribution to get fake samples.')
-tf.set_random_seed(123)
-np.random.seed(123)
+tf.app.flags.DEFINE_integer('RANDOM_SEED', 123,
+                            'Random seed used for numpy and tensorflow (dropout, sampling)')
+tf.set_random_seed(FLAGS.RANDOM_SEED)
+np.random.seed(FLAGS.RANDOM_SEED)
 '''
 --------------------------------
 
@@ -107,6 +109,7 @@ def train(model, train_x, train_y, fold_num):
     print ('training')
     with tf.Session() as sess:
         train_writer = tf.summary.FileWriter(os.path.join(summary_file + '','train'), sess.graph)
+        saver = tf.train.Saver(max_to_keep=5)
         tf.global_variables_initializer().run()
         model.assign_variables(sess)
         min_test_cost = np.inf
@@ -118,7 +121,7 @@ def train(model, train_x, train_y, fold_num):
             ckpt = tf.train.get_checkpoint_state(fold_ckpt_dir)
             if ckpt and ckpt.model_checkpoint_path:
                 print (ckpt.model_checkpoint_path)
-                model.saver.restore(sess, ckpt.model_checkpoint_path) # restore all variables
+                saver.restore(sess, ckpt.model_checkpoint_path) # restore all variables
     
         start = model.get_global_step() + 1 # get last global_step and start the next one
         print ("Start from:", start)
@@ -160,7 +163,7 @@ def train(model, train_x, train_y, fold_num):
                     print('D real class acc: ', real_class_acc, ' D fake class acc: ', fake_class_acc)
                     print('Samples', generated_sequences)
                     print()
-                    for i in range(min(3, len(generated_sequences))):
+                    for i in range(min(2, len(generated_sequences))):
                         for j in range(len(generated_sequences[i])):
                             if generated_sequences[i][j] == 0:
                                 print ('<UNK> ',end='')
@@ -176,12 +179,13 @@ def train(model, train_x, train_y, fold_num):
     #         global_step.assign(cur_epoch).eval() # set and update(eval) global_step with index, cur_epoch
             model.set_global_step(cur_epoch)
     #         saver.save(sess, fold_ckpt_dir + "/model.ckpt", global_step=global_step)
-            model.saver.save(sess, os.path.join(fold_ckpt_dir,'model.ckpt'), global_step=cur_epoch)
+            saver.save(sess, os.path.join(fold_ckpt_dir,'model.ckpt'), global_step=cur_epoch)
     #         vars = sess.run(tvars)
             vars = model.get_variables(sess)
             tvar_names = [var.name for var in tf.trainable_variables()]
             variables = dict(zip(tvar_names, vars))
-            np.savez(gan_variables_file + str(cur_epoch), **variables)
+            # np.savez(gan_variables_file + str(cur_epoch), **variables)
+            np.savez(gan_variables_file, **variables)
             
         train_writer.close()
             
@@ -193,6 +197,7 @@ def test(model, test_x, test_y, fold_num):
         model.build_graph(include_optimizer=False)
     print ('testing')
     with tf.Session() as sess:
+        saver = tf.train.Saver(max_to_keep=5)
         tf.global_variables_initializer().run()
         fold_ckpt_dir = os.path.join(ckpt_dir,str(fold_num))
         ckpt = tf.train.get_checkpoint_state(fold_ckpt_dir)
@@ -200,7 +205,7 @@ def test(model, test_x, test_y, fold_num):
             raise Exception('Could not find saved model in: ' + fold_ckpt_dir)
         if ckpt and ckpt.model_checkpoint_path:
             print (ckpt.model_checkpoint_path)
-            model.saver.restore(sess, ckpt.model_checkpoint_path) # restore all variables
+            saver.restore(sess, ckpt.model_checkpoint_path) # restore all variables
         predictions = []
         utils.Progress_Bar.startProgress('testing')
         for batch_x, batch_y, cur, data_len in utils.batch_generator(test_x, test_y, batch_size=1, one_hot=not FLAGS.SAMPLE):
@@ -217,7 +222,7 @@ def test(model, test_x, test_y, fold_num):
         
 def run_on_fold(args, fold_num, model):
     train_x, train_y, val_x, val_y, test_x, test_y = load.load_annotated_data(fold_num)
-    args.train = True
+#     args.train = True
     if args.train:
         train(model, train_x, train_y, fold_num)
     else:
