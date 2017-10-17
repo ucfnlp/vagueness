@@ -53,23 +53,48 @@ def variable_summaries(var):
     tf.summary.scalar('max ' + var.name, tf.reduce_max(var))
     tf.summary.scalar('min ' + var.name, tf.reduce_min(var))
     tf.summary.histogram('histogram ' + var.name, var)
-
-def print_metrics(y_true, y_pred):
-    print ('Performance Metrics\n-------------------\n')
-    print ('Accuracy', metrics.accuracy_score(y_true, y_pred))
-    print ('')
-    report = metrics.classification_report(y_true,y_pred)
-    print (report + '\n')
-    confusion_matrix = metrics.confusion_matrix(y_true, y_pred)
-    print ('Confusion Matrix\n-------------------\n')
-    print ('\t\t',end='')
-    for i in range(len(confusion_matrix)):
-        print (str(i) + '\t',end='')
-    print ('\n')
-    for i in range(len(confusion_matrix)):
-        print (str(i) + '\t\t',end='')
-        for j in range(len(confusion_matrix[i])):
-            print (str(confusion_matrix[i,j]) + '\t',end='')
+    
+class Metrics:
+    def __init__(self):
+        self.metrics_collections = []
+        
+    def print_and_save_metrics(self, y_true, y_pred):
+        self.print_metrics(y_true, y_pred)
+        self.save_metrics_for_fold(y_true, y_pred)
+        
+    def save_metrics_for_fold(self, y_true, y_pred):
+        self.metrics_collections.append( [metrics.accuracy_score(y_true, y_pred),
+                metrics.precision_score(y_true, y_pred, average='weighted'),
+                metrics.recall_score(y_true, y_pred, average='weighted'),
+                metrics.f1_score(y_true, y_pred, average='weighted')] )
+        
+    def print_metrics(self, y_true, y_pred):
+        print ('Performance Metrics\n-------------------\n')
+        print ('Accuracy', metrics.accuracy_score(y_true, y_pred))
+        print ('')
+        report = metrics.classification_report(y_true,y_pred)
+        print (report + '\n')
+        confusion_matrix = metrics.confusion_matrix(y_true, y_pred)
+        print ('Confusion Matrix\n-------------------\n')
+        print ('\t\t',end='')
+        for i in range(len(confusion_matrix)):
+            print (str(i) + '\t',end='')
+        print ('\n')
+        for i in range(len(confusion_matrix)):
+            print (str(i) + '\t\t',end='')
+            for j in range(len(confusion_matrix[i])):
+                print (str(confusion_matrix[i,j]) + '\t',end='')
+            print ('')
+    
+    def print_metrics_for_all_folds(self):
+        if len(self.metrics_collections) == 0:
+            raise Exception('No metrics have been saved')
+        accuracy, precision, recall, f1 = tuple(np.mean(np.array(self.metrics_collections), axis=0))
+        print ('Average Performance on All Folds\n-------------------\n')
+        print ('Accuracy', accuracy)
+        print ('Precision', precision)
+        print ('Recall', recall)
+        print ('F1 Score', f1)
         print ('')
         
 class Progress_Bar:

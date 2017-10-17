@@ -12,14 +12,12 @@ import load
 import argparse
 
 train_variables_file = '../models/tf_lm_variables.npz'
-test_model_file = '../models/tf_lm_test_model'
-test_variables_file = '../models/tf_lm_test_variables.npz'
 dataset_file = '../data/dataset.h5'
 embedding_weights_file = '../data/embedding_weights.h5'
 dictionary_file = '../data/words.dict'
 output_dataset_file = '../data/generated_dataset.h5'
+annotated_dataset_file = '../data/annotated_dataset.h5'
 
-train_ratio = 0.8
 validation_ratio = 0.1
 
 FLAGS = tf.app.flags.FLAGS
@@ -43,8 +41,10 @@ tf.app.flags.DEFINE_integer('NUM_OUTPUT_SENTENCES', 100000,
                             'How many instances should be generated.')
 tf.app.flags.DEFINE_string('CELL_TYPE', 'GRU',
                             'Which RNN cell for the RNNs.')
-tf.set_random_seed(123)
-np.random.seed(123)
+tf.app.flags.DEFINE_integer('RANDOM_SEED', 123,
+                            'Random seed used for numpy and tensorflow (dropout, sampling)')
+tf.set_random_seed(FLAGS.RANDOM_SEED)
+np.random.seed(FLAGS.RANDOM_SEED)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--fast", help="run in fast mode for testing",
@@ -95,7 +95,7 @@ ones = tf.ones(shape=[FLAGS.BATCH_SIZE, FLAGS.SEQUENCE_LEN], dtype=tf.int32)
 start_symbol_input = tf.unstack(ones + ones, axis=1)
 # embedding_tensor = tf.Variable(initial_value=embedding_weights, name='embedding_matrix')
 # embeddings = tf.nn.embedding_lookup(embedding_tensor, inputs)
-cell = utils.create_cell()
+cell = utils.create_cell(1.)
 # embeddings_time_steps = tf.unstack(embeddings, axis=1)
 # outputs, state = tf.contrib.rnn.static_rnn(
 #             cell, embeddings_time_steps, dtype=tf.float32)
@@ -207,12 +207,17 @@ with tf.Session() as sess:
 #             print '\n'
             
     utils.Progress_Bar.endProgress()
-
-train_x = x[]
+num_val = int(validation_ratio * len(x))
+val_x = x[:num_val]
+val_y = y[:num_val]
+train_x = x[num_val:]
+train_y = y[num_val:]
         
 outfile = h5py.File(output_dataset_file, 'w')
-outfile.create_dataset('train_X', data=output_x)
-outfile.create_dataset('train_Y', data=output_y)
+outfile.create_dataset('train_X', data=train_x)
+outfile.create_dataset('train_Y', data=train_y)
+outfile.create_dataset('val_X', data=val_x)
+outfile.create_dataset('val_Y', data=val_y)
 outfile.flush()
 outfile.close()
 

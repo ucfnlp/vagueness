@@ -54,6 +54,18 @@ def load_unannotated_dataset():
         test_Y = data_file['test_Y'][:]
     return train_X, train_Y, test_X, test_Y
 
+def load_generated_data():
+    print('loading training and test data')
+    with h5py.File(generated_dataset_file, 'r') as data_file:
+        train_X = data_file['train_X'][:]
+        train_Y = data_file['train_Y'][:]
+        val_X = data_file['val_X'][:]
+        val_Y = data_file['val_Y'][:]
+    with h5py.File(annotated_dataset_file, 'r') as data_file:
+        test_X = data_file['X'][:]
+        test_Y = data_file['Y'][:]
+    return train_X, train_Y, val_X, val_Y, test_X, test_Y
+
 def load_embedding_weights():
     print('loading embedding weights')
     with h5py.File(embedding_weights_file, 'r') as hf:

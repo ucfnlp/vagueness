@@ -52,6 +52,14 @@ tf.app.flags.DEFINE_boolean('SAMPLE', False,
                             'Whether to sample from the generator distribution to get fake samples.')
 tf.app.flags.DEFINE_integer('RANDOM_SEED', 123,
                             'Random seed used for numpy and tensorflow (dropout, sampling)')
+tf.app.flags.DEFINE_boolean('USE_CNN', True,
+                            'Whether to use CNN or RNN')
+tf.app.flags.DEFINE_string("FILTER_SIZES", "3,4,5", 
+                            "Comma-separated filter sizes (default: '3,4,5')")
+tf.app.flags.DEFINE_integer("NUM_FILTERS", 128, 
+                            "Number of filters per filter size (default: 128)")
+tf.app.flags.DEFINE_float('KEEP_PROB', 0.5,
+                            'Dropout probability of keeping a node')
 tf.set_random_seed(FLAGS.RANDOM_SEED)
 np.random.seed(FLAGS.RANDOM_SEED)
 '''
@@ -73,6 +81,8 @@ utils.create_dirs(prediction_folder, num_folds)
 params = load.load_pretrained_params()
 d, word_to_id = load.load_dictionary()
 vague_terms = load.load_vague_terms_vector(word_to_id, FLAGS.VOCAB_SIZE)
+
+Metrics = utils.Metrics()
 
 '''
 --------------------------------
@@ -217,7 +227,7 @@ def test(model, test_x, test_y, fold_num):
         utils.Progress_Bar.endProgress()
         predictions = np.concatenate(predictions)
         predictions_indices = np.argmax(predictions, axis=1)
-        utils.print_metrics(test_y, predictions_indices)
+        Metrics.print_and_save_metrics(test_y, predictions_indices)
         a=1
         
 def run_on_fold(args, fold_num, model):
@@ -241,6 +251,8 @@ def main(unused_argv):
     if args.xval:
         for fold_num in range(num_folds):
             run_on_fold(args, fold_num, model)
+        if not args.train:
+            Metrics.print_metrics_for_all_folds()
     else:
         run_on_fold(args, 0, model)
 

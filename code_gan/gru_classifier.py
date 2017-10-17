@@ -44,6 +44,10 @@ tf.app.flags.DEFINE_string('CELL_TYPE', 'GRU',
                             'Which RNN cell for the RNNs.')
 tf.app.flags.DEFINE_string('MODE', 'TRAIN',
                             'Whether to run in train or test mode.')
+tf.app.flags.DEFINE_integer('RANDOM_SEED', 123,
+                            'Random seed used for numpy and tensorflow (dropout, sampling)')
+tf.app.flags.DEFINE_float('KEEP_PROB', 0.5,
+                            'Dropout probability of keeping a node')
 tf.set_random_seed(123)
 np.random.seed(123)
 '''
@@ -60,6 +64,8 @@ utils.create_dirs(prediction_folder, num_folds)
         
 embedding_weights = load.load_embedding_weights()
 d, word_to_id = load.load_dictionary()
+
+Metrics = utils.Metrics()
         
 '''
 --------------------------------
@@ -68,22 +74,26 @@ MODEL
 
 --------------------------------
 '''
+l2_reg_lambda = 0.001
 print('building model')
+keep_prob = tf.placeholder(tf.float32, name='keep_prob')
 inputs = tf.placeholder(tf.int32, shape=(None, FLAGS.SEQUENCE_LEN), name='inputs')
 targets = tf.placeholder(tf.int32, shape=(None,), name='targets')
 embedding_tensor = tf.Variable(initial_value=embedding_weights, name='embedding_matrix')
 embeddings = tf.nn.embedding_lookup(embedding_tensor, inputs)
-cell = utils.create_cell()
+cell = utils.create_cell(keep_prob)
 embeddings_time_steps = tf.unstack(embeddings, axis=1)
 outputs, state = tf.contrib.rnn.static_rnn(
             cell, embeddings_time_steps, dtype=tf.float32)
 
 # output = tf.nn.dropout(output, 0.5)
 logits = tf.layers.dense(outputs[-1], FLAGS.NUM_CLASSES)
-loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=targets, logits=logits, name='softmax')
-cost = tf.reduce_sum(loss)
+losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=targets, logits=logits, name='softmax')
 tvars = tf.trainable_variables()
 tvar_names = [var.name for var in tvars]
+l2_loss = tf.add_n([ tf.nn.l2_loss(v) for v in tvars ])
+cost = tf.reduce_mean(losses) + l2_reg_lambda * l2_loss
+# cost = tf.reduce_sum(loss)
 # TODO: change to rms optimizer
 optimizer = tf.train.AdamOptimizer().minimize(cost, var_list=tvars)
 predictions = tf.cast(tf.argmax(logits, axis=1, name='predictions'), tf.int32)
@@ -101,7 +111,8 @@ def validate(sess, val_x, val_y):
         to_return = cost
         return sess.run(to_return,
                     feed_dict={inputs: batch_x,
-                               targets: batch_y})
+                               targets: batch_y,
+                               keep_prob: 1})
     sum_cost = 0
     for batch_x, batch_y, cur, data_len in utils.batch_generator(val_x, val_y):
         batch_cost = run_val_step(sess, batch_x, batch_y)
@@ -116,12 +127,14 @@ def train(train_x, train_y, val_x, val_y, fold_num):
         to_return = [optimizer, cost, accuracy, merged]
         return sess.run(to_return,
                     feed_dict={inputs: batch_x,
-                               targets: batch_y})
+                               targets: batch_y,
+                               keep_prob: FLAGS.KEEP_PROB})
         
     
     print 'training'
     with tf.Session() as sess:
         train_writer = tf.summary.FileWriter(summary_file + '/train', sess.graph)
+        saver = tf.train.Saver(max_to_keep=5)
         tf.global_variables_initializer().run()
         min_val_cost = np.inf
         num_mistakes = 0
@@ -181,7 +194,8 @@ def test(test_x, test_y, fold_num):
     def run_test_step(sess, batch_x):
         to_return = logits
         return sess.run(to_return,
-                        feed_dict={inputs: batch_x})
+                        feed_dict={inputs: batch_x,
+                               keep_prob: 1})
     def predict(sess, x, y):
         predictions = []
         utils.Progress_Bar.startProgress('testing')
@@ -206,14 +220,14 @@ def test(test_x, test_y, fold_num):
             print ckpt.model_checkpoint_path
             saver.restore(sess, ckpt.model_checkpoint_path) # restore all variables
         predictions_indices, _ = predict(sess, test_x, test_y)
-        utils.print_metrics(test_y, predictions_indices)
+        Metrics.print_and_save_metrics(test_y, predictions_indices)
         
 def run_on_fold(args, fold_num):
     if args.generated_dataset:
         train_x, train_y, val_x, val_y, test_x, test_y = load.load_generated_data(fold_num)
     else:
         train_x, train_y, val_x, val_y, test_x, test_y = load.load_annotated_data(fold_num)
-    args.train = True
+#     args.train = True
     if args.train:
         train(train_x, train_y, val_x, val_y, fold_num)
     else:
@@ -233,6 +247,8 @@ def main(unused_argv):
     if args.xval:
         for fold_num in range(num_folds):
             run_on_fold(args, fold_num)
+        if not args.train:
+            Metrics.print_metrics_for_all_folds()
     else:
         run_on_fold(args, 0)
 

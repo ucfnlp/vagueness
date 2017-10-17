@@ -239,6 +239,8 @@ train_len = int(train_ratio*len(doc_ids))
 val_len = int(validation_ratio*len(doc_ids))
 
 outfile = h5py.File(dataset_file, 'w')
+outfile.create_dataset('X', data=X_padded)
+outfile.create_dataset('Y', data=Y_sentence)
 
 def get_all_except_one(my_list, exclude_idx):
     return [x for i,x in enumerate(my_list) if i!=exclude_idx]
