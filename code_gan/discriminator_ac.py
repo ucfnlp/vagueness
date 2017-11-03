@@ -20,7 +20,7 @@ def discriminator(x, embedding_matrix, keep_prob):
 #         dropped_embeddings = tf.nn.dropout(embeddings, keep_prob, seed=FLAGS.RANDOM_SEED, name='dropped_embeddings')
         
         if FLAGS.USE_CNN:
-            output = cnn(embeddings)
+            output = cnn(embeddings, keep_prob)
         else:
             embeddings_unstacked = tf.unstack(
                 tf.reshape(embeddings, [-1, FLAGS.SEQUENCE_LEN, FLAGS.EMBEDDING_SIZE]), axis=1)

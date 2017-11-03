@@ -3,6 +3,7 @@ import tensorflow as tf
 from seq2seq import  embedding_rnn_decoder
 from tensorflow.contrib.rnn import BasicRNNCell, BasicLSTMCell, GRUCell
 import utils
+from networkx.algorithms.shortest_paths import weighted
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -18,7 +19,7 @@ def generator(z, c, initial_vague_terms, dims, start_symbol_input, embedding_mat
         def create_vague_weights(vague_terms, c):
             a = tf.tile(vague_terms, dims)
             b = tf.reshape(a,[-1,FLAGS.VOCAB_SIZE])
-            vague_weights = tf.multiply(b,tf.cast(tf.reshape(c - 1, [-1,1]),tf.float32))
+            vague_weights = tf.multiply(b,tf.cast(tf.reshape(c*2 - 2, [-1,1]),tf.float32))
             return vague_weights
         vague_weights = create_vague_weights(vague_terms, c)
         
@@ -30,9 +31,11 @@ def generator(z, c, initial_vague_terms, dims, start_symbol_input, embedding_mat
                                   output_projection=(W,b),
                                   feed_previous=True,
                                   update_embedding_for_previous=True,
-                                  sample_from_distribution=True,
+                                  sample_from_distribution=FLAGS.SAMPLE,
                                   vague_weights=vague_weights,
-                                  embedding_matrix=embedding_matrix)
+                                  embedding_matrix=embedding_matrix,
+                                  hidden_noise_std_dev=FLAGS.HIDDEN_NOISE_STD_DEV,
+                                  vocab_noise_std_dev=FLAGS.VOCAB_NOISE_STD_DEV)
 #                                   class_embedding=c_embedding)
 
         samples = tf.cast(tf.stack(samples, axis=1), tf.int32)
@@ -51,7 +54,11 @@ def generator(z, c, initial_vague_terms, dims, start_symbol_input, embedding_mat
         
         logits = [tf.matmul(output, W) + b for output in outputs] #TODO add vague vocabulary, and remove class embedding
         weighted_logits = [tf.add(logit, vague_weights) for logit in logits]
-        x = [tf.nn.softmax(logit) for logit in weighted_logits] # is this softmaxing over the right dimension? this turns into 3D
+        if FLAGS.VOCAB_NOISE_STD_DEV != 0:
+          weighted_logits = [utils.gaussian_noise_layer(wl, std=FLAGS.VOCAB_NOISE_STD_DEV) for wl in weighted_logits]
+#         x = [tf.nn.softmax(logit) for logit in weighted_logits] # is this softmaxing over the right dimension? this turns into 3D
+#                                                                 # and does softmax make sense here in between gen and discr?
+        x = [tf.nn.tanh(logit) for logit in weighted_logits]
         for i in range(len(x)):
             x[i] = tf.multiply(x[i], u[i])
         return x, samples, probs, u

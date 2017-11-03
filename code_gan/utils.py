@@ -20,12 +20,28 @@ def create_cell(keep_prob, reuse=False):
     cell = tf.contrib.rnn.DropoutWrapper(cell, output_keep_prob=keep_prob, seed=FLAGS.RANDOM_SEED)
     return cell
 
+def get_closest_word_by_embedding(logits, embedding_tensor_fixed):
+    reshaped_logits = tf.reshape(logits, [-1, FLAGS.EMBEDDING_SIZE])
+    normed_embedding = tf.nn.l2_normalize(embedding_tensor_fixed, dim=1)
+    normed_array = tf.nn.l2_normalize(reshaped_logits, dim=1)
+    cosine_similarity = tf.matmul(normed_array, tf.transpose(normed_embedding, [1, 0]))
+    if len(logits.get_shape().as_list()) == 3:
+        predictions = tf.cast(tf.reshape(tf.argmax(cosine_similarity, 1), 
+                                         [-1, FLAGS.SEQUENCE_LEN]), tf.int32) 
+    elif len(logits.get_shape().as_list()) == 2:
+        predictions = tf.cast(tf.argmax(cosine_similarity, 1), tf.int32) 
+    return predictions
+
+def gaussian_noise_layer(input_layer, std=1.0):
+    noise = tf.random_normal(shape=tf.shape(input_layer), mean=0.0, stddev=std, dtype=tf.float32) 
+    return input_layer + noise
+
 def get_variable_by_name(tvars, name):
     list = [v for v in tvars if v.name == name]
-    if len(list) < 0:
-        raise 'No variable found by name: ' + name
+    if len(list) <= 0:
+        raise Exception('No variable found by name: ' + name)
     if len(list) > 1:
-        raise 'Multiple variables found by name: ' + name
+        raise Exception('Multiple variables found by name: ' + name)
     return list[0]
 
 def assign_variable_op(params, tvars, pretrained_name, cur_name, append=False): #TODO change becuase not using class embedding here

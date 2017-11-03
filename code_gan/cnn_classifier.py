@@ -12,11 +12,25 @@ from sklearn import metrics
 import sys
 from cnn import cnn
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--train", help="run in train mode",
+                    action="store_true")
+parser.add_argument("--xval", help="perform five-fold cross validation",
+                    action="store_true")
+parser.add_argument("--generated_dataset", help="use the generated dataset rather than the manually annotated dataset",
+                    action="store_true")
+args = parser.parse_args()
+
+if args.generated_dataset:
+    prediction_words_file = '/predictions_words_cnn_classifier_unsupervised'
+    ckpt_dir = '../models/cnn_classifier_unsupervised_ckpts'
+else:
+    prediction_words_file = '/predictions_words_cnn_classifier'
+    ckpt_dir = '../models/cnn_classifier_ckpts'
+    
 prediction_folder = '../predictions'
-prediction_words_file = '/predictions_words_cnn_classifier'
 summary_file = '/home/logan/tmp'
 # train_variables_file = '../models/tf_enc_dec_variables.npz'
-ckpt_dir = '../models/cnn_classifier_ckpts'
 use_checkpoint = False
 num_folds = 5
 
@@ -261,14 +275,6 @@ def run_on_fold(args, fold_num):
         
     
 def main(unused_argv):
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--train", help="run in train mode",
-                        action="store_true")
-    parser.add_argument("--xval", help="perform five-fold cross validation",
-                        action="store_true")
-    parser.add_argument("--generated_dataset", help="use the generated dataset rather than the manually annotated dataset",
-                        action="store_true")
-    args = parser.parse_args()
     args.xval = True
     if args.xval:
         metrics_collections = []

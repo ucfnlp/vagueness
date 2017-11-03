@@ -60,6 +60,12 @@ tf.app.flags.DEFINE_integer("NUM_FILTERS", 128,
                             "Number of filters per filter size (default: 128)")
 tf.app.flags.DEFINE_float('KEEP_PROB', 0.5,
                             'Dropout probability of keeping a node')
+tf.app.flags.DEFINE_float('HIDDEN_NOISE_STD_DEV', 0, #0.05
+                            'Standard deviation for the gaussian noise added to each time '
+                            + 'step\'s hidden state. To turn off, set = 0')
+tf.app.flags.DEFINE_float('VOCAB_NOISE_STD_DEV', 1,
+                            'Standard deviation for the gaussian noise added to each time '
+                            + 'step\'s output vocab distr. To turn off, set = 0')
 tf.set_random_seed(FLAGS.RANDOM_SEED)
 np.random.seed(FLAGS.RANDOM_SEED)
 '''
@@ -107,7 +113,7 @@ def save_samples_to_file(generated_sequences, batch_fake_c, fold_num, epoch):
             
 def sample_Z(m, n):
     return np.zeros((m, n))
-#     return np.random.normal(size=[m, n])
+#     return np.random.normal(size=[m, n], scale=FLAGS.NOISE_STD_DEV)
 
 def sample_C(m):
     return np.random.randint(low=0, high=FLAGS.NUM_CLASSES, size=m)
@@ -246,6 +252,8 @@ def main(unused_argv):
                         action="store_true")
     parser.add_argument("--xval", help="perform five-fold cross validation",
                         action="store_true")
+#     parser.add_argument("--savelocation", help="perform five-fold cross validation",
+#                         type=str, action='store_const')
     args = parser.parse_args()
     model = acgan_model.ACGANModel(vague_terms, params)
     if args.xval:

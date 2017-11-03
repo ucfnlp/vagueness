@@ -64,6 +64,28 @@ def load_generated_data():
     with h5py.File(annotated_dataset_file, 'r') as data_file:
         test_X = data_file['X'][:]
         test_Y = data_file['Y'][:]
+        # Remove </s> symbols
+        test_X[test_X == 3] = 0
+        # Shift over to remove <s> symbols
+        test_X = shift(test_X, [0,-1], cval=0)
+#     print (train_X)
+#     print (train_Y)
+#     for i in range(min(5, len(train_X))):
+#         for j in range(len(train_X[i])):
+#             if train_X[i][j] == 0:
+#                 continue
+#             word = d[train_X[i][j]]
+#             print (word + ' ',)
+#         print ('(' + str(train_Y[i]) + ')\n')
+#     print (test_X)
+#     print (test_Y)
+#     for i in range(min(5, len(test_X))):
+#         for j in range(len(test_X[i])):
+#             if test_X[i][j] == 0:
+#                 continue
+#             word = d[test_X[i][j]]
+#             print (word + ' ',)
+#         print ('(' + str(test_Y[i]) + ')\n')
     return train_X, train_Y, val_X, val_Y, test_X, test_Y
 
 def load_embedding_weights():

@@ -113,15 +113,15 @@ class ACGANModel(object):
             logits=self.D_logit_fake, labels=tf.ones_like(self.D_logit_fake)))
         self.G_loss = D_loss_class_fake + G_loss_fake
         
-        tvars   = tf.trainable_variables() 
-        theta_D = [var for var in tvars if 'D_' in var.name]
-        theta_G = [var for var in tvars if 'G_' in var.name]
-        theta_D.append(self.embedding_matrix)
-        theta_G.append(self.embedding_matrix)
-        D_lossL2 = tf.add_n([ tf.nn.l2_loss(v) for v in theta_D ]) * 0.00000001
-        G_lossL2 = tf.add_n([ tf.nn.l2_loss(v) for v in theta_G ]) * 0.00000001
-        self.D_loss += D_lossL2
-        self.G_loss += G_lossL2
+#         tvars   = tf.trainable_variables() 
+#         theta_D = [var for var in tvars if 'D_' in var.name]
+#         theta_G = [var for var in tvars if 'G_' in var.name]
+#         theta_D.append(self.embedding_matrix)
+#         theta_G.append(self.embedding_matrix)
+#         D_lossL2 = tf.add_n([ tf.nn.l2_loss(v) for v in theta_D ]) * 0.00000001
+#         G_lossL2 = tf.add_n([ tf.nn.l2_loss(v) for v in theta_G ]) * 0.00000001
+#         self.D_loss += D_lossL2
+#         self.G_loss += G_lossL2
         
     def _add_assignment_ops(self):
         tvars = tf.trainable_variables()

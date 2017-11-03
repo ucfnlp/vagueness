@@ -32,6 +32,7 @@ dataset_file = '../data/annotated_dataset.h5'
 embedding_weights_file = '../data/annotated_embedding_weights.h5'
 clean_data_json = '../data/clean_data.json'
 vague_phrases_file = '../data/vague_phrases.txt'
+sentence_level_figure_file = '../data/sentence_level_distribution.png'
 
  
 vocab_size = 5000
@@ -156,7 +157,7 @@ plt.title("Sentence-Level Vagueness Score Distribution")
 plt.xlabel("Score")
 plt.ylabel("Number of Sentences")
 plt.show(block=False)
-
+plt.savefig(sentence_level_figure_file)
 
 sorted_vague_phrases = sorted(vague_phrases.items(), key=operator.itemgetter(1), reverse=True)
 with open(vague_phrases_file, 'w') as f:

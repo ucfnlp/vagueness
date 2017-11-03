@@ -77,6 +77,7 @@ from tensorflow.python.ops import variable_scope
 from tensorflow.python.util import nest
 
 import tensorflow as tf
+import utils
 
 # TODO(ebrevdo): Remove once _linear is fully deprecated.
 # linear = rnn_cell_impl._linear  # pylint: disable=protected-access
@@ -84,7 +85,10 @@ import tensorflow as tf
 
 def _extract_argmax_and_embed(embedding,
                               output_projection=None,
-                              update_embedding=True):
+                              update_embedding=True,
+                              vague_weights=None,
+                              fixed_embedding=None,
+                              vocab_noise_std_dev=None):
   """Get a loop_function that extracts the previous symbol and embeds it.
 
   Args:
@@ -101,20 +105,29 @@ def _extract_argmax_and_embed(embedding,
   def loop_function(prev, _):
     if output_projection is not None:
       prev = nn_ops.xw_plus_b(prev, output_projection[0], output_projection[1])
-    prev_symbol = math_ops.argmax(prev, 1)
+    if vague_weights is not None:
+      prev = tf.add(prev, vague_weights)
+    if vocab_noise_std_dev is not None:
+      prev = utils.gaussian_noise_layer(prev, std=vocab_noise_std_dev)
+    probabilities = tf.nn.softmax(prev)
+    if fixed_embedding is not None:
+        prev_symbol = utils.get_closest_word_by_embedding(prev, fixed_embedding)
+    else:
+        prev_symbol = math_ops.argmax(prev, 1)
     # Note that gradients will not propagate through the second parameter of
     # embedding_lookup.
     emb_prev = embedding_ops.embedding_lookup(embedding, prev_symbol)
     if not update_embedding:
       emb_prev = array_ops.stop_gradient(emb_prev)
-    return emb_prev
+    return emb_prev, prev_symbol, probabilities
 
   return loop_function
   
 def _extract_sample_from_distribution_and_embed(embedding,
                               output_projection=None,
                               update_embedding=True,
-                              vague_weights=None):
+                              vague_weights=None,
+                              vocab_noise_std_dev=None):
   """Get a loop_function that randomly chooses a symbol from the previous 
   distribution and embeds it.
 
@@ -134,7 +147,9 @@ def _extract_sample_from_distribution_and_embed(embedding,
       prev = nn_ops.xw_plus_b(prev, output_projection[0], output_projection[1])
 #     log_probabilities = tf.log(prev)
     if vague_weights is not None:
-        prev = tf.add(prev, vague_weights)
+      prev = tf.add(prev, vague_weights)
+    if vocab_noise_std_dev is not None:
+      prev = utils.gaussian_noise_layer(prev, std=vocab_noise_std_dev)
     probabilities = tf.nn.softmax(prev)
     log_probabilities = tf.log(probabilities)
     prev_symbol = tf.multinomial(log_probabilities, 1, name='sample')
@@ -155,7 +170,9 @@ def rnn_decoder(decoder_inputs,
                 loop_function=None,
                 scope=None,
                 sample_from_distribution=False,
-                class_embedding=None):
+                class_embedding=None,
+                hidden_noise_std_dev=None,
+                vocab_noise_std_dev=None):
   """RNN decoder for the sequence-to-sequence model.
 
   Args:
@@ -190,26 +207,23 @@ def rnn_decoder(decoder_inputs,
     for i, inp in enumerate(decoder_inputs):
       if loop_function is not None and prev is not None:
         with variable_scope.variable_scope("loop_function", reuse=True):
-          if sample_from_distribution:
-            inp, sample, probability = loop_function(prev, i)
-            samples.append(sample)
-            probabilities.append(probability)
-          else:
-            inp = loop_function(prev, i)
+          inp, sample, probability = loop_function(prev, i)
+          samples.append(sample)
+          probabilities.append(probability)
       if i > 0:
         variable_scope.get_variable_scope().reuse_variables()
       if class_embedding is not None:
         inp = tf.concat([inp, class_embedding], 1)
+      if hidden_noise_std_dev is not None:
+          state = utils.gaussian_noise_layer(state, std=hidden_noise_std_dev)
       output, state = cell(inp, state)
       outputs.append(output)
       if loop_function is not None:
         prev = output
-  if sample_from_distribution:
     inp, sample, probability = loop_function(prev, i)
     samples.append(sample)
     probabilities.append(probability)
     return outputs, state, samples, probabilities
-  return outputs, state
 
 
 def basic_rnn_seq2seq(encoder_inputs,
@@ -298,7 +312,10 @@ def embedding_rnn_decoder(decoder_inputs,
                           sample_from_distribution=False,
                           class_embedding=None,
                           vague_weights=None,
-                          embedding_matrix=None):
+                          embedding_matrix=None,
+                          fixed_embedding=None,
+                          hidden_noise_std_dev=None,
+                          vocab_noise_std_dev=None):
   """RNN decoder with embedding and a pure-decoding option.
 
   Args:
@@ -343,9 +360,15 @@ def embedding_rnn_decoder(decoder_inputs,
     if output_projection is not None:
       dtype = scope.dtype
       proj_weights = ops.convert_to_tensor(output_projection[0], dtype=dtype)
-      proj_weights.get_shape().assert_is_compatible_with([None, num_symbols])
+      if fixed_embedding is not None:
+          proj_weights.get_shape().assert_is_compatible_with([None, embedding_size])
+      else:
+          proj_weights.get_shape().assert_is_compatible_with([None, num_symbols])
       proj_biases = ops.convert_to_tensor(output_projection[1], dtype=dtype)
-      proj_biases.get_shape().assert_is_compatible_with([num_symbols])
+      if fixed_embedding is not None:
+          proj_biases.get_shape().assert_is_compatible_with([embedding_size])
+      else:
+          proj_biases.get_shape().assert_is_compatible_with([num_symbols])
 
     if embedding_matrix is not None:
         embedding = embedding_matrix
@@ -355,16 +378,20 @@ def embedding_rnn_decoder(decoder_inputs,
     if sample_from_distribution:
         loop_function = _extract_sample_from_distribution_and_embed(
             embedding, output_projection, 
-            update_embedding_for_previous, vague_weights) if feed_previous else None
+            update_embedding_for_previous, vague_weights,
+            vocab_noise_std_dev) if feed_previous else None
     else:
         loop_function = _extract_argmax_and_embed(
             embedding, output_projection,
-            update_embedding_for_previous) if feed_previous else None
+            update_embedding_for_previous, vague_weights, fixed_embedding,
+            vocab_noise_std_dev) if feed_previous else None
     emb_inp = (embedding_ops.embedding_lookup(embedding, i)
                for i in decoder_inputs)
+    add_gaussian_noise = fixed_embedding is not None
     return rnn_decoder(
         emb_inp, initial_state, cell, loop_function=loop_function, 
-        sample_from_distribution=sample_from_distribution, class_embedding=class_embedding)
+        sample_from_distribution=sample_from_distribution, class_embedding=class_embedding,
+        hidden_noise_std_dev=hidden_noise_std_dev)
 
 
 def embedding_rnn_seq2seq(encoder_inputs,

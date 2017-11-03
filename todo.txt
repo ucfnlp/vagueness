@@ -1,0 +1,10 @@
+reasoning on using acgan discriminator as classifier. gan says final discriminator is bad but thats ok
+inter-rater reliability. I guess i'll just try cohens kappa or fleis kappa but just pick the ones that have overlap between annotators
+should i work on word level predictions model?
+data stastics to include, liek AMT stats
+add random noise to each time step or to the first time step in the generator (maybe instead of categorical sampling in output layer?)
+need reasoning for why we didn't include a class embedding c for the generator. why we instead included c as controlling the softmax output
+number of test sentences in each fold
+discriminator can tell so easily because fake examples are not as sparse as real examples
+in generator, upon reaching a </s>, make the rest of the sentence be padding
+
