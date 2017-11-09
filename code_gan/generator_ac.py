@@ -56,9 +56,9 @@ def generator(z, c, initial_vague_terms, dims, start_symbol_input, embedding_mat
         weighted_logits = [tf.add(logit, vague_weights) for logit in logits]
         if FLAGS.VOCAB_NOISE_STD_DEV != 0:
           weighted_logits = [utils.gaussian_noise_layer(wl, std=FLAGS.VOCAB_NOISE_STD_DEV) for wl in weighted_logits]
-#         x = [tf.nn.softmax(logit) for logit in weighted_logits] # is this softmaxing over the right dimension? this turns into 3D
-#                                                                 # and does softmax make sense here in between gen and discr?
-        x = [tf.nn.tanh(logit) for logit in weighted_logits]
+        x = [tf.nn.softmax(logit) for logit in weighted_logits] # is this softmaxing over the right dimension? this turns into 3D
+                                                                # and does softmax make sense here in between gen and discr?
+#         x = [tf.nn.tanh(logit) for logit in weighted_logits]
         for i in range(len(x)):
             x[i] = tf.multiply(x[i], u[i])
         return x, samples, probs, u

@@ -12,3 +12,10 @@ models/enc_dec_ckpts/checkpoint
 models/gan_ckpts/checkpoint
 *.npz
 predictions/
+__pycache__
+.idea/
+.settings/
+.vscode/
+todo.txt
+today todo.txt
+

@@ -10,6 +10,8 @@ def discriminator(x, embedding_matrix, keep_prob):
     with tf.variable_scope("D_"):
         
 #         embeddings = tf.layers.dense(x_stacked,FLAGS.EMBEDDING_SIZE, use_bias=False, name='embedding')
+        if not FLAGS.SHARE_EMBEDDING:
+            embedding_matrix = tf.Variable(embedding_matrix)
 
         if FLAGS.SAMPLE:
             embeddings = tf.nn.embedding_lookup(embedding_matrix, x)
@@ -30,9 +32,11 @@ def discriminator(x, embedding_matrix, keep_prob):
                 cell, embeddings_unstacked, dtype=tf.float32)
             output = outputs[-1]
             
-        
-        logit = tf.layers.dense(output, 1)
-        prob = tf.nn.sigmoid(logit)
+#         softmax instaed of sigmoid
+        logit = tf.layers.dense(output, 2)
+        prob = tf.slice(tf.nn.softmax(logit), [0, 1], [-1, 1])
+#         logit = tf.layers.dense(output, 1)
+#         prob = tf.nn.sigmoid(logit)
         
         class_logits = tf.layers.dense(output, FLAGS.NUM_CLASSES)
     

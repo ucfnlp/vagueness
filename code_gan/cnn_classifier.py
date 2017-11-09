@@ -75,7 +75,7 @@ LOAD DATA
 --------------------------------
 '''
     
-# Make directories for model files and prediction files
+''' Make directories for model files and prediction files ''' 
 utils.create_dirs(ckpt_dir, num_folds)
 utils.create_dirs(prediction_folder, num_folds)
         
@@ -208,7 +208,7 @@ def train(train_x, train_y, val_x, val_y, fold_num):
             vars = sess.run(tvars)
             tvar_names = [var.name for var in tf.trainable_variables()]
             variables = dict(zip(tvar_names, vars))
-            np.savez(variables_file + str(cur_epoch), **variables)
+            np.savez(variables_file, **variables)
             
             val_cost = validate(sess, val_x, val_y)
             print('Val Loss: ', val_cost)

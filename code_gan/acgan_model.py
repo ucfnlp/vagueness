@@ -19,7 +19,8 @@ class ACGANModel(object):
         
     def run_D_train_step(self, sess, batch_x, batch_c, z, batch_fake_c):
         to_return = [self.D_solver, self.D_loss, self.D_real_acc, self.D_fake_acc, 
-            self.D_real_class_acc, self.D_fake_class_acc]
+            self.D_real_class_acc, self.D_fake_class_acc, self.D_loss_real, 
+            self.D_loss_fake, self.D_loss_class_real, self.D_loss_class_fake]
         return sess.run(to_return,
                     feed_dict={self.real_x: batch_x,
                                self.real_c: batch_c,
@@ -40,6 +41,13 @@ class ACGANModel(object):
         to_return = self.D_class_logit_real
         return sess.run(to_return,
                         feed_dict={self.real_x: batch_x,
+                               self.keep_prob: 1})
+        
+    def run_val(self, sess, batch_x, batch_y):
+        to_return = self.D_loss_class_real
+        return sess.run(to_return,
+                    feed_dict={self.real_x: batch_x,
+                               self.real_c: batch_y,
                                self.keep_prob: 1})
         
     def run_samples(self, sess, batch_fake_c, batch_z):
@@ -100,18 +108,25 @@ class ACGANModel(object):
             self.D_class_logit_fake, axis=1), tf.int32), self.fake_c), tf.float32)) /  tf.cast(
                 tf.shape(self.fake_c)[0], tf.float32)
     
-        D_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
-            logits=self.D_logit_real, labels=tf.ones_like(self.D_logit_real)))
-        D_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
-            logits=self.D_logit_fake, labels=tf.zeros_like(self.D_logit_fake)))
-        D_loss_class_real = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
+#         self.D_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
+#             logits=self.D_logit_real, labels=tf.ones_like(self.D_logit_real)))
+#         self.D_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
+#             logits=self.D_logit_fake, labels=tf.zeros_like(self.D_logit_fake)))
+        ones = tf.ones(tf.stack([tf.shape(self.D_logit_real)[0],]), dtype=tf.int32)
+        zeros = tf.zeros(tf.stack([tf.shape(self.D_logit_fake)[0],]), dtype=tf.int32)
+        self.D_loss_real = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
+            logits=self.D_logit_real, labels=ones))
+        self.D_loss_fake = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
+            logits=self.D_logit_fake, labels=zeros))
+        self.D_loss_class_real = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
             logits=self.D_class_logit_real, labels=self.real_c))
-        D_loss_class_fake = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
+        self.D_loss_class_fake = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
             logits=self.D_class_logit_real, labels=self.fake_c))
-        self.D_loss = D_loss_real + D_loss_fake + D_loss_class_real + D_loss_class_fake
-        G_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
+        self.D_loss = FLAGS.SOURCE_LOSS_WEIGHT*(self.D_loss_real + self.D_loss_fake) + (
+            self.D_loss_class_real)*FLAGS.REAL_CLASS_LOSS_WEIGHT + self.D_loss_class_fake*FLAGS.FAKE_CLASS_LOSS_WEIGHT
+        self.G_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
             logits=self.D_logit_fake, labels=tf.ones_like(self.D_logit_fake)))
-        self.G_loss = D_loss_class_fake + G_loss_fake
+        self.G_loss = FLAGS.FAKE_CLASS_LOSS_WEIGHT*self.D_loss_class_fake + FLAGS.SOURCE_LOSS_WEIGHT*self.G_loss_fake
         
 #         tvars   = tf.trainable_variables() 
 #         theta_D = [var for var in tvars if 'D_' in var.name]
