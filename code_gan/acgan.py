@@ -17,16 +17,17 @@ import sys
 
 prediction_folder = os.path.join('..','predictions')
 prediction_words_file = os.path.join('predictions_words_acgan')
-summary_file = os.path.join('home','logan','tmp')
+summary_file = os.path.join('/home','logan','tmp')
 # train_variables_file = os.path.join('../models/tf_enc_dec_variables.npz')
-default_ckpt_dir = os.path.join('..','models','acgan_ckpts')
+models_folder = os.path.join('..','models')
+default_model_name = 'acgan'
 use_checkpoint = False
 num_folds = 5
 
 start_time = time.time()
 
 FLAGS = tf.app.flags.FLAGS
-tf.app.flags.DEFINE_integer('EPOCHS', 50,
+tf.app.flags.DEFINE_integer('EPOCHS', 51,
                             'Num epochs.')
 tf.app.flags.DEFINE_integer('VOCAB_SIZE', 5000,
                             'Number of words in the vocabulary.')
@@ -48,7 +49,7 @@ tf.app.flags.DEFINE_string('CELL_TYPE', 'GRU',
                             'Which RNN cell for the RNNs.')
 tf.app.flags.DEFINE_string('MODE', 'TRAIN',
                             'Whether to run in train or test mode.')
-tf.app.flags.DEFINE_boolean('SAMPLE', True,
+tf.app.flags.DEFINE_boolean('SAMPLE', False,
                             'Whether to sample from the generator distribution to get fake samples.')
 tf.app.flags.DEFINE_integer('RANDOM_SEED', 123,
                             'Random seed used for numpy and tensorflow (dropout, sampling)')
@@ -66,7 +67,7 @@ tf.app.flags.DEFINE_float('HIDDEN_NOISE_STD_DEV', 0, #0.05
 tf.app.flags.DEFINE_float('VOCAB_NOISE_STD_DEV', 1,
                             'Standard deviation for the gaussian noise added to each time '
                             + 'step\'s output vocab distr. To turn off, set = 0')
-tf.app.flags.DEFINE_float('SOURCE_LOSS_WEIGHT', 1,
+tf.app.flags.DEFINE_float('SOURCE_LOSS_WEIGHT', 0,
                             'How much importance that fake/real contributes to the total loss.')
 tf.app.flags.DEFINE_float('REAL_CLASS_LOSS_WEIGHT', 1,
                             'How much importance that real instances\' class loss contributes to the total loss.')
@@ -81,7 +82,7 @@ np.random.seed(FLAGS.RANDOM_SEED)
 
 ''' Store model using sampling in a different location ''' 
 if FLAGS.SAMPLE:
-    default_ckpt_dir = os.path.join('..','models','acgan_sample_ckpts')
+    default_model_name = 'acgan_sample'
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--train_only", help="run in train mode only",
@@ -90,7 +91,7 @@ parser.add_argument("--test_only", help="run in test mode only",
                     action="store_true")
 parser.add_argument("--one_fold", help="perform only on one fold instead of five-fold cross validation",
                     action="store_true")
-parser.add_argument('--ckpt_dir', default=default_ckpt_dir, help='Where to save model') 
+parser.add_argument('--name', default=default_model_name, help='Optional name of model, and affects where to save model') 
 #     parser.add_argument("--savelocation", help="perform five-fold cross validation",
 #                         type=str, action='store_const')
 args = parser.parse_args()
@@ -101,10 +102,10 @@ LOAD DATA
 
 --------------------------------
 '''
-gan_variables_file = os.path.join(args.ckpt_dir,'tf_acgan_variables_')
+ckpt_dir = os.path.join(models_folder, args.name)
 
 ''' Make directories for model files and prediction files '''
-utils.create_dirs(args.ckpt_dir, num_folds)
+utils.create_dirs(ckpt_dir, num_folds)
 utils.create_dirs(prediction_folder, num_folds)
 
 params = load.load_pretrained_params()
@@ -123,7 +124,7 @@ MAIN
 
 def save_samples_to_file(generated_sequences, batch_fake_c, fold_num, epoch):
     fold_prediction_dir = os.path.join(prediction_folder, str(fold_num))
-    file_name = fold_prediction_dir + prediction_words_file + '_epoch_' + str(epoch)
+    file_name = os.path.join(fold_prediction_dir, prediction_words_file + '_epoch_' + str(epoch))
     with open(file_name, 'w') as f:
         for i in range(len(generated_sequences)):
             for j in range(len(generated_sequences[i])):
@@ -162,7 +163,7 @@ def train(model, train_x, train_y, val_x, val_y, fold_num):
         min_test_cost = np.inf
         num_mistakes = 0
         
-        fold_ckpt_dir = os.path.join(args.ckpt_dir,str(fold_num))
+        fold_ckpt_dir = os.path.join(ckpt_dir,str(fold_num))
         gan_variables_file = os.path.join(fold_ckpt_dir,'tf_acgan_variables_')
         if use_checkpoint:
             ckpt = tf.train.get_checkpoint_state(fold_ckpt_dir)
@@ -260,7 +261,7 @@ def test(model, test_x, test_y, fold_num):
     with tf.Session() as sess:
         saver = tf.train.Saver(max_to_keep=5)
         tf.global_variables_initializer().run()
-        fold_ckpt_dir = os.path.join(args.ckpt_dir,str(fold_num))
+        fold_ckpt_dir = os.path.join(ckpt_dir,str(fold_num))
         ckpt = tf.train.get_checkpoint_state(fold_ckpt_dir)
         if not ckpt:
             raise Exception('Could not find saved model in: ' + fold_ckpt_dir)

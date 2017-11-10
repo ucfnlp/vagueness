@@ -33,10 +33,10 @@ def discriminator(x, embedding_matrix, keep_prob):
             output = outputs[-1]
             
 #         softmax instaed of sigmoid
-        logit = tf.layers.dense(output, 2)
-        prob = tf.slice(tf.nn.softmax(logit), [0, 1], [-1, 1])
-#         logit = tf.layers.dense(output, 1)
-#         prob = tf.nn.sigmoid(logit)
+#         logit = tf.layers.dense(output, 2)
+#         prob = tf.slice(tf.nn.softmax(logit), [0, 1], [-1, 1])
+        logit = tf.layers.dense(output, 1)
+        prob = tf.nn.sigmoid(logit)
         
         class_logits = tf.layers.dense(output, FLAGS.NUM_CLASSES)
     

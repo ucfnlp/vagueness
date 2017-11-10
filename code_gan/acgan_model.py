@@ -108,16 +108,16 @@ class ACGANModel(object):
             self.D_class_logit_fake, axis=1), tf.int32), self.fake_c), tf.float32)) /  tf.cast(
                 tf.shape(self.fake_c)[0], tf.float32)
     
-#         self.D_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
-#             logits=self.D_logit_real, labels=tf.ones_like(self.D_logit_real)))
-#         self.D_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
-#             logits=self.D_logit_fake, labels=tf.zeros_like(self.D_logit_fake)))
-        ones = tf.ones(tf.stack([tf.shape(self.D_logit_real)[0],]), dtype=tf.int32)
-        zeros = tf.zeros(tf.stack([tf.shape(self.D_logit_fake)[0],]), dtype=tf.int32)
-        self.D_loss_real = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
-            logits=self.D_logit_real, labels=ones))
-        self.D_loss_fake = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
-            logits=self.D_logit_fake, labels=zeros))
+        self.D_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
+            logits=self.D_logit_real, labels=tf.ones_like(self.D_logit_real)))
+        self.D_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
+            logits=self.D_logit_fake, labels=tf.zeros_like(self.D_logit_fake)))
+#         ones = tf.ones(tf.stack([tf.shape(self.D_logit_real)[0],]), dtype=tf.int32)
+#         zeros = tf.zeros(tf.stack([tf.shape(self.D_logit_fake)[0],]), dtype=tf.int32)
+#         self.D_loss_real = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
+#             logits=self.D_logit_real, labels=ones))
+#         self.D_loss_fake = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
+#             logits=self.D_logit_fake, labels=zeros))
         self.D_loss_class_real = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
             logits=self.D_class_logit_real, labels=self.real_c))
         self.D_loss_class_fake = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
