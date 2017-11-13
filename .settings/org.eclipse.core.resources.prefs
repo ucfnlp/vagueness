@@ -1,10 +1,7 @@
 eclipse.preferences.version=1
-encoding//code_gan/enc_dec_test.py=utf-8
-encoding//code_gan/encoder_decoder.py=utf-8
 encoding//code_gan/generate_sentences.py=utf-8
 encoding//code_gan/json_to_dataset.py=utf-8
 encoding//code_gan/metrics.py=utf-8
-encoding//code_gan/normalize_pretrain_lm.py=utf-8
 encoding//code_gan/preprocess_unannotated_data.py=utf-8
 encoding//code_gan/pretrain_language_model.py=utf-8
 encoding//code_gan/turk_csv_to_json.py=utf-8

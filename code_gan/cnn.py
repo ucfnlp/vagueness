@@ -13,11 +13,13 @@ def cnn(embeddings, keep_prob):
         pooled_outputs = []
         filter_sizes = list(map(int, FLAGS.FILTER_SIZES.split(",")))
         for i, filter_size in enumerate(filter_sizes):
-            with tf.name_scope("conv-maxpool-%s" % filter_size):
+            with tf.variable_scope("conv-maxpool-%s" % filter_size):
                 # Convolution Layer
                 filter_shape = [filter_size, FLAGS.EMBEDDING_SIZE, 1, FLAGS.NUM_FILTERS]
-                W = tf.Variable(tf.truncated_normal(filter_shape, stddev=0.1), name="W")
-                b = tf.Variable(tf.constant(0.1, shape=[FLAGS.NUM_FILTERS]), name="b")
+                W = tf.get_variable('W', initializer=tf.truncated_normal(filter_shape, stddev=0.1))
+                b = tf.get_variable('b', initializer=tf.constant(0.1, shape=[FLAGS.NUM_FILTERS]))
+#                 W = tf.Variable(tf.truncated_normal(filter_shape, stddev=0.1), name="W")
+#                 b = tf.Variable(tf.constant(0.1, shape=[FLAGS.NUM_FILTERS]), name="b")
                 conv = tf.nn.conv2d(
                     embeddings_expanded,
                     W,

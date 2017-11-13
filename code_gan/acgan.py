@@ -5,8 +5,6 @@ import tensorflow as tf
 import os
 import time
 import h5py
-from generator_ac import generator
-from discriminator_ac import discriminator
 import utils
 import load
 import acgan_model
@@ -27,62 +25,7 @@ num_folds = 5
 start_time = time.time()
 
 FLAGS = tf.app.flags.FLAGS
-tf.app.flags.DEFINE_integer('EPOCHS', 51,
-                            'Num epochs.')
-tf.app.flags.DEFINE_integer('VOCAB_SIZE', 5000,
-                            'Number of words in the vocabulary.')
-tf.app.flags.DEFINE_integer('LATENT_SIZE', 512,
-                            'Size of both the hidden state of RNN and random vector z.')
-tf.app.flags.DEFINE_integer('SEQUENCE_LEN', 50,
-                            'Max length for each sentence.')
-tf.app.flags.DEFINE_integer('EMBEDDING_SIZE', 300,
-                            'Max length for each sentence.')
-tf.app.flags.DEFINE_integer('PATIENCE', 400,
-                            'Max length for each sentence.')
-tf.app.flags.DEFINE_integer('BATCH_SIZE', 64,
-                            'Max length for each sentence.')
-tf.app.flags.DEFINE_integer('NUM_CLASSES', 4,
-                            'Max length for each sentence.')
-tf.app.flags.DEFINE_integer('CLASS_EMBEDDING_SIZE', 1,
-                            'Max length for each sentence.')
-tf.app.flags.DEFINE_string('CELL_TYPE', 'GRU',
-                            'Which RNN cell for the RNNs.')
-tf.app.flags.DEFINE_string('MODE', 'TRAIN',
-                            'Whether to run in train or test mode.')
-tf.app.flags.DEFINE_boolean('SAMPLE', False,
-                            'Whether to sample from the generator distribution to get fake samples.')
-tf.app.flags.DEFINE_integer('RANDOM_SEED', 123,
-                            'Random seed used for numpy and tensorflow (dropout, sampling)')
-tf.app.flags.DEFINE_boolean('USE_CNN', True,
-                            'Whether to use CNN or RNN')
-tf.app.flags.DEFINE_string("FILTER_SIZES", "3,4,5", 
-                            "Comma-separated filter sizes (default: '3,4,5')")
-tf.app.flags.DEFINE_integer("NUM_FILTERS", 128, 
-                            "Number of filters per filter size (default: 128)")
-tf.app.flags.DEFINE_float('KEEP_PROB', 0.5,
-                            'Dropout probability of keeping a node')
-tf.app.flags.DEFINE_float('HIDDEN_NOISE_STD_DEV', 0, #0.05
-                            'Standard deviation for the gaussian noise added to each time '
-                            + 'step\'s hidden state. To turn off, set = 0')
-tf.app.flags.DEFINE_float('VOCAB_NOISE_STD_DEV', 1,
-                            'Standard deviation for the gaussian noise added to each time '
-                            + 'step\'s output vocab distr. To turn off, set = 0')
-tf.app.flags.DEFINE_float('SOURCE_LOSS_WEIGHT', 0,
-                            'How much importance that fake/real contributes to the total loss.')
-tf.app.flags.DEFINE_float('REAL_CLASS_LOSS_WEIGHT', 1,
-                            'How much importance that real instances\' class loss contributes to the total loss.')
-tf.app.flags.DEFINE_float('FAKE_CLASS_LOSS_WEIGHT', 1,
-                            'How much importance that real instances\' class loss contributes to the total loss.')
-tf.app.flags.DEFINE_boolean('SHARE_EMBEDDING', True,
-                            'Whether the discriminator and generator should share their embedding parameters')
-tf.app.flags.DEFINE_boolean('TRAIN_GENERATOR', True,
-                            'Whether to train the generator\'s parameters')
-tf.set_random_seed(FLAGS.RANDOM_SEED)
-np.random.seed(FLAGS.RANDOM_SEED)
 
-''' Store model using sampling in a different location ''' 
-if FLAGS.SAMPLE:
-    default_model_name = 'acgan_sample'
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--train_only", help="run in train mode only",
@@ -92,9 +35,75 @@ parser.add_argument("--test_only", help="run in test mode only",
 parser.add_argument("--one_fold", help="perform only on one fold instead of five-fold cross validation",
                     action="store_true")
 parser.add_argument('--name', default=default_model_name, help='Optional name of model, and affects where to save model') 
-#     parser.add_argument("--savelocation", help="perform five-fold cross validation",
-#                         type=str, action='store_const')
+parser.add_argument('--EPOCHS', default=51, type=int,
+                            help='Num epochs.')
+parser.add_argument('--VOCAB_SIZE', default=5000, type=int,
+                            help='Number of words in the vocabulary.')
+parser.add_argument('--LATENT_SIZE', default=512, type=int,
+                            help='Size of both the hidden state of RNN and random vector z.')
+parser.add_argument('--SEQUENCE_LEN', default=50, type=int,
+                            help='Max length for each sentence.')
+parser.add_argument('--EMBEDDING_SIZE', default=300, type=int,
+                            help='Max length for each sentence.')
+parser.add_argument('--PATIENCE', default=400, type=int,
+                            help='Max length for each sentence.')
+parser.add_argument('--BATCH_SIZE', default=64, type=int,
+                            help='Max length for each sentence.')
+parser.add_argument('--NUM_CLASSES', default=4, type=int,
+                            help='Max length for each sentence.')
+parser.add_argument('--CLASS_EMBEDDING_SIZE', default=1, type=int,
+                            help='Max length for each sentence.')
+parser.add_argument('--CELL_TYPE', default='GRU',
+                            help='Which RNN cell for the RNNs.')
+parser.add_argument('--MODE', default='TRAIN',
+                            help='Whether to run in train or test mode.')
+parser.add_argument('--SAMPLE', default=False,
+                            help='Whether to sample from the generator distribution to get fake samples.')
+parser.add_argument('--RANDOM_SEED', default=123, type=int,
+                            help='Random seed used for numpy and tensorflow (dropout, sampling)')
+parser.add_argument('--USE_CNN', default=True,
+                            help='Whether to use CNN or RNN')
+parser.add_argument('--FILTER_SIZES', default='3,4,5',
+                            help="Comma-separated filter sizes (default: '3,4,5')")
+parser.add_argument('--NUM_FILTERS', default=128,  type=int,
+                            help='Number of filters per filter size (default: 128)')
+parser.add_argument('--KEEP_PROB', default=0.5, type=float,
+                            help='Dropout probability of keeping a node')
+parser.add_argument('--HIDDEN_NOISE_STD_DEV', default=0, type=float, #0.05
+                            help='Standard deviation for the gaussian noise added to each time '
+                            + 'step\'s hidden state. To turn off, set = 0')
+parser.add_argument('--VOCAB_NOISE_STD_DEV', default=1, type=float,
+                            help='Standard deviation for the gaussian noise added to each time '
+                            + 'step\'s output vocab distr. To turn off, set = 0')
+parser.add_argument('--SOURCE_LOSS_WEIGHT', default=1, type=float,
+                            help='How much importance that fake/real contributes to the total loss.')
+parser.add_argument('--REAL_CLASS_LOSS_WEIGHT', default=1, type=float,
+                            help='How much importance that real instances\' class loss contributes to the total loss.')
+parser.add_argument('--FAKE_CLASS_LOSS_WEIGHT', default=1, type=float,
+                            help='How much importance that real instances\' class loss contributes to the total loss.')
+parser.add_argument('--SHARE_EMBEDDING', default=True,
+                            help='Whether the discriminator and generator should share their embedding parameters')
+parser.add_argument('--TRAIN_GENERATOR', default=True,
+                            help='Whether to train the generator\'s parameters')
 args = parser.parse_args()
+
+for arg_name, arg_value in vars(args).iteritems():
+    if type(arg_value) == bool:
+        tf.app.flags.DEFINE_boolean(arg_name, arg_value, docstring='')
+    elif type(arg_value) == int:
+        tf.app.flags.DEFINE_integer(arg_name, arg_value, docstring='')
+    elif type(arg_value) == float:
+        tf.app.flags.DEFINE_float(arg_name, arg_value, docstring='')
+    elif type(arg_value) == str:
+        tf.app.flags.DEFINE_string(arg_name, arg_value, docstring='')
+        
+tf.set_random_seed(FLAGS.RANDOM_SEED)
+np.random.seed(FLAGS.RANDOM_SEED)
+''' Store model using sampling in a different location ''' 
+if FLAGS.SAMPLE:
+    default_model_name = 'acgan_sample'
+    
+
 '''
 --------------------------------
 
@@ -178,9 +187,10 @@ def train(model, train_x, train_y, val_x, val_y, fold_num):
         batch_fake_c = np.zeros([FLAGS.BATCH_SIZE], dtype=np.int32)
         batch_z = sample_Z(FLAGS.BATCH_SIZE, FLAGS.LATENT_SIZE)
         batch_samples = model.run_samples(sess, batch_fake_c, batch_z)
+        summary = model.run_summary(sess)
+        train_writer.add_summary(summary, -1)
         save_samples_to_file(batch_samples, batch_fake_c, fold_num, 'pre')
         
-        xaxis = 0
         step = 0
         min_val_cost = np.inf
         num_mistakes = 0
@@ -193,8 +203,8 @@ def train(model, train_x, train_y, val_x, val_y, fold_num):
                 for j in range(1):
                     _, D_loss_curr, real_acc, fake_acc, real_class_acc, fake_class_acc, real_loss, fake_loss, real_class_loss, fake_class_loss = model.run_D_train_step(
                         sess, batch_x, batch_y, batch_z, batch_fake_c)
-                    print (real_loss, fake_loss, real_class_loss, fake_class_loss)
-                    print (real_acc, fake_acc, real_class_acc, fake_class_acc)
+#                     print (real_loss, fake_loss, real_class_loss, fake_class_loss)
+#                     print (real_acc, fake_acc, real_class_acc, fake_class_acc)
                 step_ctr += 1
                 if step_ctr == disc_steps:
                     step_ctr = 0

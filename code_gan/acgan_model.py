@@ -55,6 +55,9 @@ class ACGANModel(object):
                                                  self.z: batch_z,
                                                  self.keep_prob: 1})
         
+    def run_summary(self, sess):
+        return sess.run(self.merged)
+        
     def get_variables(self, sess):
         return sess.run(tf.trainable_variables())
     
@@ -121,7 +124,7 @@ class ACGANModel(object):
         self.D_loss_class_real = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
             logits=self.D_class_logit_real, labels=self.real_c))
         self.D_loss_class_fake = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
-            logits=self.D_class_logit_real, labels=self.fake_c))
+            logits=self.D_class_logit_fake, labels=self.fake_c))
         self.D_loss = FLAGS.SOURCE_LOSS_WEIGHT*(self.D_loss_real + self.D_loss_fake) + (
             self.D_loss_class_real)*FLAGS.REAL_CLASS_LOSS_WEIGHT + self.D_loss_class_fake*FLAGS.FAKE_CLASS_LOSS_WEIGHT
         self.G_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
@@ -152,6 +155,7 @@ class ACGANModel(object):
         tvars = tf.trainable_variables()
         theta_D = [var for var in tvars if 'D_' in var.name]
         theta_G = [var for var in tvars if 'G_' in var.name]
+#         theta_G = [var for var in tvars if 'G_' in var.name or 'D_' in var.name]
         theta_D.append(self.embedding_matrix)
         theta_G.append(self.embedding_matrix)
         self.D_solver = tf.train.AdamOptimizer().minimize(self.D_loss, var_list=theta_D)
