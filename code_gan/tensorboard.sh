@@ -1,1 +1,1 @@
-tensorboard --logdir=~/tmp/train
+tensorboard --logdir=~/tensorboard/$1

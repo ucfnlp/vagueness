@@ -15,7 +15,7 @@ import sys
 
 prediction_folder = os.path.join('..','predictions')
 prediction_words_file = os.path.join('predictions_words_acgan')
-summary_file = os.path.join('/home','logan','tmp')
+summary_file = os.path.join('/home','logan','tensorboard')
 # train_variables_file = os.path.join('../models/tf_enc_dec_variables.npz')
 models_folder = os.path.join('..','models')
 default_model_name = 'acgan'
@@ -35,7 +35,7 @@ parser.add_argument("--test_only", help="run in test mode only",
 parser.add_argument("--one_fold", help="perform only on one fold instead of five-fold cross validation",
                     action="store_true")
 parser.add_argument('--name', default=default_model_name, help='Optional name of model, and affects where to save model') 
-parser.add_argument('--EPOCHS', default=51, type=int,
+parser.add_argument('--EPOCHS', default=50, type=int,
                             help='Num epochs.')
 parser.add_argument('--VOCAB_SIZE', default=5000, type=int,
                             help='Number of words in the vocabulary.')
@@ -75,7 +75,7 @@ parser.add_argument('--HIDDEN_NOISE_STD_DEV', default=0, type=float, #0.05
 parser.add_argument('--VOCAB_NOISE_STD_DEV', default=1, type=float,
                             help='Standard deviation for the gaussian noise added to each time '
                             + 'step\'s output vocab distr. To turn off, set = 0')
-parser.add_argument('--SOURCE_LOSS_WEIGHT', default=1, type=float,
+parser.add_argument('--SOURCE_LOSS_WEIGHT', default=0, type=float,
                             help='How much importance that fake/real contributes to the total loss.')
 parser.add_argument('--REAL_CLASS_LOSS_WEIGHT', default=1, type=float,
                             help='How much importance that real instances\' class loss contributes to the total loss.')
@@ -85,6 +85,10 @@ parser.add_argument('--SHARE_EMBEDDING', default=True,
                             help='Whether the discriminator and generator should share their embedding parameters')
 parser.add_argument('--TRAIN_GENERATOR', default=True,
                             help='Whether to train the generator\'s parameters')
+parser.add_argument('--L2_LAMBDA', default=0, type=float,
+                            help='L2 regularization lambda parameter')
+parser.add_argument('--CHECKPOINT', default=-1, type=int,
+                            help='Which checkpoint model to load when running on test set. -1 means the last model.')
 args = parser.parse_args()
 
 for arg_name, arg_value in vars(args).iteritems():
@@ -115,7 +119,7 @@ ckpt_dir = os.path.join(models_folder, args.name)
 
 ''' Make directories for model files and prediction files '''
 utils.create_dirs(ckpt_dir, num_folds)
-utils.create_dirs(prediction_folder, num_folds)
+utils.create_dirs(os.path.join(prediction_folder, FLAGS.name), num_folds)
 
 params = load.load_pretrained_params()
 d, word_to_id = load.load_dictionary()
@@ -132,7 +136,7 @@ MAIN
 '''
 
 def save_samples_to_file(generated_sequences, batch_fake_c, fold_num, epoch):
-    fold_prediction_dir = os.path.join(prediction_folder, str(fold_num))
+    fold_prediction_dir = os.path.join(prediction_folder, FLAGS.name, str(fold_num))
     file_name = os.path.join(fold_prediction_dir, prediction_words_file + '_epoch_' + str(epoch))
     with open(file_name, 'w') as f:
         for i in range(len(generated_sequences)):
@@ -165,8 +169,8 @@ def train(model, train_x, train_y, val_x, val_y, fold_num):
         model.build_graph(include_optimizer=True)
     print ('training')
     with tf.Session() as sess:
-        train_writer = tf.summary.FileWriter(os.path.join(summary_file + '','train'), sess.graph)
-        saver = tf.train.Saver(max_to_keep=2)
+        train_writer = tf.summary.FileWriter(os.path.join(summary_file, FLAGS.name), sess.graph)
+        saver = tf.train.Saver(max_to_keep=500)
         tf.global_variables_initializer().run()
         model.assign_variables(sess)
         min_test_cost = np.inf

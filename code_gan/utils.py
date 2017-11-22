@@ -58,17 +58,18 @@ def tf_count(t, val):
     count = tf.reduce_sum(as_ints)
     return count
 
-def variable_summaries(var):
+def variable_summaries(vars):
   """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
   with tf.name_scope('summaries'):
-    mean = tf.reduce_mean(var)
-    tf.summary.scalar('mean ' + var.name, mean)
-    with tf.name_scope('stddev'):
-      stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
-    tf.summary.scalar('stddev ' + var.name, stddev)
-    tf.summary.scalar('max ' + var.name, tf.reduce_max(var))
-    tf.summary.scalar('min ' + var.name, tf.reduce_min(var))
-    tf.summary.histogram('histogram ' + var.name, var)
+      for var in vars:
+        mean = tf.reduce_mean(var)
+        tf.summary.scalar(var.name + ' mean', mean)
+        #     with tf.name_scope('stddev'):
+        #       stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+        #     tf.summary.scalar('stddev ' + var.name, stddev)
+        #     tf.summary.scalar('max ' + var.name, tf.reduce_max(var))
+        #     tf.summary.scalar('min ' + var.name, tf.reduce_min(var))
+        tf.summary.histogram(var.name + ' histogram', var)
     
 class Metrics:
     def __init__(self):

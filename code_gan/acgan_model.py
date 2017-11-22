@@ -131,15 +131,15 @@ class ACGANModel(object):
             logits=self.D_logit_fake, labels=tf.ones_like(self.D_logit_fake)))
         self.G_loss = FLAGS.FAKE_CLASS_LOSS_WEIGHT*self.D_loss_class_fake + FLAGS.SOURCE_LOSS_WEIGHT*self.G_loss_fake
         
-#         tvars   = tf.trainable_variables() 
-#         theta_D = [var for var in tvars if 'D_' in var.name]
-#         theta_G = [var for var in tvars if 'G_' in var.name]
-#         theta_D.append(self.embedding_matrix)
-#         theta_G.append(self.embedding_matrix)
-#         D_lossL2 = tf.add_n([ tf.nn.l2_loss(v) for v in theta_D ]) * 0.00000001
-#         G_lossL2 = tf.add_n([ tf.nn.l2_loss(v) for v in theta_G ]) * 0.00000001
-#         self.D_loss += D_lossL2
-#         self.G_loss += G_lossL2
+        tvars   = tf.trainable_variables() 
+        theta_D = [var for var in tvars if 'D_' in var.name]
+        theta_G = [var for var in tvars if 'G_' in var.name]
+        theta_D.append(self.embedding_matrix)
+        theta_G.append(self.embedding_matrix)
+        D_lossL2 = tf.add_n([ tf.nn.l2_loss(v) for v in theta_D ]) * FLAGS.L2_LAMBDA
+        G_lossL2 = tf.add_n([ tf.nn.l2_loss(v) for v in theta_G ]) * FLAGS.L2_LAMBDA
+        self.D_loss += D_lossL2
+        self.G_loss += G_lossL2
         
     def _add_assignment_ops(self):
         tvars = tf.trainable_variables()
@@ -161,16 +161,13 @@ class ACGANModel(object):
         self.D_solver = tf.train.AdamOptimizer().minimize(self.D_loss, var_list=theta_D)
         self.G_solver = tf.train.AdamOptimizer().minimize(self.G_loss, var_list=theta_G)
         for var in theta_D:
-            utils.variable_summaries(var) 
             print (var)
         for var in theta_G:
-            utils.variable_summaries(var) 
             print (var)
         
     def _add_saver_and_summary(self):
         self.global_step = tf.Variable(-1, name='global_step', trainable=False)
-        for var in tf.trainable_variables():
-            utils.variable_summaries(var)
+        utils.variable_summaries(tf.trainable_variables())
         self.merged = tf.summary.merge_all()
         
     
