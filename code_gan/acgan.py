@@ -67,12 +67,15 @@ parser.add_argument('--FILTER_SIZES', default='3,4,5',
                             help="Comma-separated filter sizes (default: '3,4,5')")
 parser.add_argument('--NUM_FILTERS', default=128,  type=int,
                             help='Number of filters per filter size (default: 128)')
-parser.add_argument('--KEEP_PROB', default=0.5, type=float,
+parser.add_argument('--KEEP_PROB', default=1, type=float,
                             help='Dropout probability of keeping a node')
 parser.add_argument('--HIDDEN_NOISE_STD_DEV', default=0, type=float, #0.05
                             help='Standard deviation for the gaussian noise added to each time '
                             + 'step\'s hidden state. To turn off, set = 0')
-parser.add_argument('--VOCAB_NOISE_STD_DEV', default=1, type=float,
+# parser.add_argument('--VOCAB_NOISE_STD_DEV', default=1, type=float,
+#                             help='Standard deviation for the gaussian noise added to each time '
+#                             + 'step\'s output vocab distr. To turn off, set = 0')
+parser.add_argument('--VOCAB_NOISE_STD_DEV', default=0, type=float,
                             help='Standard deviation for the gaussian noise added to each time '
                             + 'step\'s output vocab distr. To turn off, set = 0')
 parser.add_argument('--SOURCE_LOSS_WEIGHT', default=0, type=float,
@@ -85,10 +88,14 @@ parser.add_argument('--SHARE_EMBEDDING', default=True,
                             help='Whether the discriminator and generator should share their embedding parameters')
 parser.add_argument('--TRAIN_GENERATOR', default=True,
                             help='Whether to train the generator\'s parameters')
-parser.add_argument('--L2_LAMBDA', default=0, type=float,
+parser.add_argument('--L2_LAMBDA', default=0.0001, type=float,
                             help='L2 regularization lambda parameter')
 parser.add_argument('--CHECKPOINT', default=-1, type=int,
                             help='Which checkpoint model to load when running on test set. -1 means the last model.')
+parser.add_argument('--GUMBEL', default=True,
+                            help='Whether to use Gumbel-Softmax Relaxation')
+parser.add_argument('--TAU', default=0.5, type=float,
+                            help='Tau parameter used for gumbel softmax relaxation technique. Used only if GUMBEL=True.')
 args = parser.parse_args()
 
 for arg_name, arg_value in vars(args).iteritems():
@@ -227,7 +234,7 @@ def train(model, train_x, train_y, val_x, val_y, fold_num):
                     print('D real class acc: ', real_class_acc, ' D fake class acc: ', fake_class_acc)
                     print('Samples', generated_sequences)
                     print()
-                    for i in range(min(2, len(generated_sequences))):
+                    for i in range(min(6, len(generated_sequences))):
                         for j in range(len(generated_sequences[i])):
                             if generated_sequences[i][j] == 0:
                                 print ('<UNK> ',end='')
@@ -276,12 +283,17 @@ def test(model, test_x, test_y, fold_num):
         saver = tf.train.Saver(max_to_keep=5)
         tf.global_variables_initializer().run()
         fold_ckpt_dir = os.path.join(ckpt_dir,str(fold_num))
-        ckpt = tf.train.get_checkpoint_state(fold_ckpt_dir)
-        if not ckpt:
-            raise Exception('Could not find saved model in: ' + fold_ckpt_dir)
-        if ckpt and ckpt.model_checkpoint_path:
-            print (ckpt.model_checkpoint_path)
-            saver.restore(sess, ckpt.model_checkpoint_path) # restore all variables
+        if FLAGS.CHECKPOINT == -1:
+            ckpt = tf.train.get_checkpoint_state(fold_ckpt_dir)
+            if not ckpt:
+                raise Exception('Could not find saved model in: ' + fold_ckpt_dir)
+            if ckpt and ckpt.model_checkpoint_path:
+                print (ckpt.model_checkpoint_path)
+                saver.restore(sess, ckpt.model_checkpoint_path) # restore all variables
+        else:
+            ckpt_model_path = os.path.join(fold_ckpt_dir, 'model.ckpt-'+str(FLAGS.CHECKPOINT))
+            print (ckpt_model_path)
+            saver.restore(sess, ckpt_model_path) # restore all variables
         predictions = []
         utils.Progress_Bar.startProgress('testing')
         for batch_x, batch_y, cur, data_len in utils.batch_generator(test_x, test_y, batch_size=1, one_hot=not FLAGS.SAMPLE):
@@ -311,8 +323,8 @@ def run_in_mode(model, mode, one_fold):
     else:
         for fold_num in range(num_folds):
             run_on_fold(mode, model, fold_num)
-        if mode == 'test':
-            Metrics.print_metrics_for_all_folds()
+    if mode == 'test':
+        Metrics.print_metrics_for_all_folds()
     
 def main(unused_argv):
     if args.train_only and args.test_only: raise Exception('provide only one mode')

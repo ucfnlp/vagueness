@@ -5,7 +5,6 @@ from discriminator_ac import discriminator
 import param_names
 import utils
 
-start_symbol_index = 2
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -26,7 +25,7 @@ class ACGANModel(object):
                                self.real_c: batch_c,
                                self.fake_c: batch_fake_c,
                                self.z: z,
-                               self.keep_prob: 0.5})
+                               self.keep_prob: FLAGS.KEEP_PROB})
     
     def run_G_train_step(self, sess, batch_x, batch_c, z, batch_fake_c):
         to_return = [self.G_solver, self.G_loss, self.samples, self.probs, self.merged]
@@ -35,7 +34,7 @@ class ACGANModel(object):
                                self.real_c: batch_c,
                                self.fake_c: batch_fake_c,
                                self.z: z,
-                               self.keep_prob: 0.5})
+                               self.keep_prob: FLAGS.KEEP_PROB})
         
     def run_test(self, sess, batch_x):
         to_return = self.D_class_logit_real
@@ -78,16 +77,17 @@ class ACGANModel(object):
         self.real_c = tf.placeholder(tf.int32, [None,], 'class')
         self.fake_c = tf.placeholder(tf.int32, [None,], 'class')
         self.z = tf.placeholder(tf.float32, [None, FLAGS.LATENT_SIZE], name='z')
-        self.dims = tf.stack([tf.shape(self.fake_c)[0],])
-        self.start_symbol_input = [tf.fill(self.dims, start_symbol_index) for i in range(FLAGS.SEQUENCE_LEN)]
         
-        self.embedding_matrix = tf.Variable(tf.random_normal([FLAGS.VOCAB_SIZE, FLAGS.EMBEDDING_SIZE]), name='embedding_matrix')
+        # Initialization doesn't matter here, since the embedding matrix is
+        # being replaced with the pretrained parameters
+        self.embedding_matrix = tf.get_variable(shape=[FLAGS.VOCAB_SIZE, FLAGS.EMBEDDING_SIZE], 
+                            initializer=tf.contrib.layers.xavier_initializer(), name='embedding_matrix')
         self.keep_prob = tf.placeholder(tf.float32)
         
     def _add_acgan(self):
         with tf.variable_scope(tf.get_variable_scope()) as scope:
-            G_sample, self.samples, self.probs, self.u = generator(self.z, self.fake_c, self.vague_terms, self.dims,
-                 self.start_symbol_input, self.embedding_matrix, self.keep_prob) #TODO move to generator
+            self.G_sample, self.samples, self.probs, self.u, self.m = generator(self.z, self.fake_c, self.vague_terms,
+                 self.embedding_matrix, self.keep_prob) #TODO move to generator
             self.D_real, self.D_logit_real, self.D_class_logit_real = discriminator(self.real_x, 
                  self.embedding_matrix, self.keep_prob)
             tf.get_variable_scope().reuse_variables()
@@ -95,7 +95,7 @@ class ACGANModel(object):
                 self.D_fake, self.D_logit_fake, self.D_class_logit_fake = discriminator(self.samples,
                      self.embedding_matrix, self.keep_prob)
             else:
-                self.D_fake, self.D_logit_fake, self.D_class_logit_fake = discriminator(G_sample,
+                self.D_fake, self.D_logit_fake, self.D_class_logit_fake = discriminator(self.G_sample,
                      self.embedding_matrix, self.keep_prob)
         a=0
         

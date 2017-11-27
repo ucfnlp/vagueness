@@ -6,14 +6,19 @@ import utils
 from networkx.algorithms.shortest_paths import weighted
 
 FLAGS = tf.app.flags.FLAGS
+start_symbol_index = 2
 
-def generator(z, c, initial_vague_terms, dims, start_symbol_input, embedding_matrix, keep_prob):
+def generator(z, c, initial_vague_terms, embedding_matrix, keep_prob):
+    
     with tf.variable_scope("G_"):
         cell = utils.create_cell(keep_prob)
 #         cell = tf.contrib.rnn.DropoutWrapper(cell, output_keep_prob=0.5)
-        
-        W = tf.Variable(tf.random_normal([FLAGS.LATENT_SIZE, FLAGS.VOCAB_SIZE]), name='output_weights')    
-        b = tf.Variable(tf.random_normal([FLAGS.VOCAB_SIZE]), name='output_biases')    
+        dims = tf.stack([tf.shape(c)[0],])
+        start_symbol_input = [tf.fill(dims, start_symbol_index) for i in range(FLAGS.SEQUENCE_LEN)]
+        W = tf.get_variable("output_weights", shape=[FLAGS.LATENT_SIZE, FLAGS.VOCAB_SIZE],
+           initializer=tf.contrib.layers.xavier_initializer())
+        b = tf.get_variable("output_biases", shape=[FLAGS.VOCAB_SIZE],
+           initializer=tf.zeros_initializer())
         
         vague_terms = tf.Variable(initial_vague_terms, dtype=tf.float32, name='vague_terms')
         def create_vague_weights(vague_terms, c):
@@ -23,7 +28,7 @@ def generator(z, c, initial_vague_terms, dims, start_symbol_input, embedding_mat
             return vague_weights
         vague_weights = create_vague_weights(vague_terms, c)
         
-        outputs, states, samples, probs = embedding_rnn_decoder(start_symbol_input,   # is this ok? I'm not sure what giving 0 inputs does (although it should be completely ignoring inputs)
+        outputs, states, samples, probs, logits = embedding_rnn_decoder(start_symbol_input,   # is this ok? I'm not sure what giving 0 inputs does (although it should be completely ignoring inputs)
                                   z,
                                   cell,
                                   FLAGS.VOCAB_SIZE,
@@ -35,8 +40,9 @@ def generator(z, c, initial_vague_terms, dims, start_symbol_input, embedding_mat
                                   vague_weights=vague_weights,
                                   embedding_matrix=embedding_matrix,
                                   hidden_noise_std_dev=FLAGS.HIDDEN_NOISE_STD_DEV,
-                                  vocab_noise_std_dev=FLAGS.VOCAB_NOISE_STD_DEV)
-#                                   class_embedding=c_embedding)
+                                  vocab_noise_std_dev=FLAGS.VOCAB_NOISE_STD_DEV,
+                                  gumbel=FLAGS.GUMBEL)
+#                                   class_embedding=c_embedding),
 
         samples = tf.cast(tf.stack(samples, axis=1), tf.int32)
         probs = tf.stack(probs, axis=1)
@@ -55,18 +61,20 @@ def generator(z, c, initial_vague_terms, dims, start_symbol_input, embedding_mat
         u=tf.cast(tf.unstack(n,axis=1),tf.float32)
 #         u=None
         
-        logits = [tf.matmul(output, W) + b for output in outputs] #TODO add vague vocabulary, and remove class embedding
-        weighted_logits = [tf.add(logit, vague_weights) for logit in logits]
-        if FLAGS.VOCAB_NOISE_STD_DEV != 0:
-          weighted_logits = [utils.gaussian_noise_layer(wl, std=FLAGS.VOCAB_NOISE_STD_DEV) for wl in weighted_logits]
-        x = [tf.nn.softmax(logit) for logit in weighted_logits] # is this softmaxing over the right dimension? this turns into 3D
+#         logits = [tf.matmul(output, W) + b for output in outputs] #TODO add vague vocabulary, and remove class embedding
+#         weighted_logits = [tf.add(logit, vague_weights) for logit in logits]
+#         if FLAGS.VOCAB_NOISE_STD_DEV != 0:
+#           weighted_logits = [utils.gaussian_noise_layer(wl, std=FLAGS.VOCAB_NOISE_STD_DEV) for wl in weighted_logits]
+        if FLAGS.GUMBEL:
+            logits = [logit/FLAGS.TAU for logit in logits]
+        x = [tf.nn.softmax(logit) for logit in logits] # is this softmaxing over the right dimension? this turns into 3D
                                                                 # and does softmax make sense here in between gen and discr?
 #         x = [tf.nn.tanh(logit) for logit in weighted_logits]
         ''' Used for clipping all words after <eos> word '''
         for i in range(len(x)):
             x[i] = tf.multiply(x[i], u[i])
 
-        return x, samples, probs, u
+        return x, samples, probs, u, m
 
 
 

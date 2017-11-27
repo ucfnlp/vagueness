@@ -5,7 +5,6 @@ FLAGS = tf.app.flags.FLAGS
 
 def cnn(embeddings, keep_prob):
     
-    l2_loss = tf.constant(0.0)
     embeddings_expanded = tf.expand_dims(embeddings, -1)
     
     with tf.variable_scope('cnn'):
@@ -16,10 +15,8 @@ def cnn(embeddings, keep_prob):
             with tf.variable_scope("conv-maxpool-%s" % filter_size):
                 # Convolution Layer
                 filter_shape = [filter_size, FLAGS.EMBEDDING_SIZE, 1, FLAGS.NUM_FILTERS]
-                W = tf.get_variable('W', initializer=tf.truncated_normal(filter_shape, stddev=0.1))
+                W = tf.get_variable('W', shape=filter_shape, initializer=tf.contrib.layers.xavier_initializer())
                 b = tf.get_variable('b', initializer=tf.constant(0.1, shape=[FLAGS.NUM_FILTERS]))
-#                 W = tf.Variable(tf.truncated_normal(filter_shape, stddev=0.1), name="W")
-#                 b = tf.Variable(tf.constant(0.1, shape=[FLAGS.NUM_FILTERS]), name="b")
                 conv = tf.nn.conv2d(
                     embeddings_expanded,
                     W,
