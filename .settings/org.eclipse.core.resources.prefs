@@ -5,3 +5,4 @@ encoding//code_gan/metrics.py=utf-8
 encoding//code_gan/preprocess_unannotated_data.py=utf-8
 encoding//code_gan/pretrain_language_model.py=utf-8
 encoding//code_gan/turk_csv_to_json.py=utf-8
+encoding//code_gan/word_level_lstm.py=utf-8

@@ -11,7 +11,7 @@ import param_names
 import load
 import argparse
 
-train_variables_file = '../models/tf_lm_variables.npz'
+train_variables_file = '../models/lm_ckpts/tf_lm_variables.npz'
 dataset_file = '../data/dataset.h5'
 embedding_weights_file = '../data/embedding_weights.h5'
 dictionary_file = '../data/words.dict'
@@ -24,7 +24,7 @@ validation_ratio = 0.1
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_integer('EPOCHS', 20,
                             'Num epochs.')
-tf.app.flags.DEFINE_integer('VOCAB_SIZE', 5000,
+tf.app.flags.DEFINE_integer('VOCAB_SIZE', 10000,
                             'Number of words in the vocabulary.')
 tf.app.flags.DEFINE_integer('LATENT_SIZE', 512,
                             'Size of both the hidden state of RNN and random vector z.')
@@ -40,14 +40,10 @@ tf.app.flags.DEFINE_integer('NUM_CLASSES', 4,
                             'Number of classes for sentence classification.')
 tf.app.flags.DEFINE_integer('NUM_OUTPUT_SENTENCES', 100000,
                             'How many instances should be generated.')
-tf.app.flags.DEFINE_string('CELL_TYPE', 'GRU',
+tf.app.flags.DEFINE_string('CELL_TYPE', 'LSTM',
                             'Which RNN cell for the RNNs.')
 tf.app.flags.DEFINE_boolean('SAMPLE', False,
                             'Whether to sample from the generator distribution to get fake samples.')
-tf.app.flags.DEFINE_boolean('OUTPUT_EMBEDDING', False,
-                            'If true, output layer is the embedding size, otherwise the vocab size.')
-tf.app.flags.DEFINE_string('EMBEDDING_TRAINABLE', 'mixed',
-                            'trainable, fixed, or mixed')
 tf.app.flags.DEFINE_float('HIDDEN_NOISE_STD_DEV', 0, #0.05
                             'Standard deviation for the gaussian noise added to each time '
                             + 'step\'s hidden state. To turn off, set = 0')
@@ -59,22 +55,6 @@ tf.app.flags.DEFINE_integer('RANDOM_SEED', 123,
 tf.set_random_seed(FLAGS.RANDOM_SEED)
 np.random.seed(FLAGS.RANDOM_SEED)
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--fast", help="run in fast mode for testing",
-                    action="store_true")
-parser.add_argument("--output_embedding", help="If true, output layer is the embedding size, otherwise the vocab size.",
-                    action="store_true")
-args = parser.parse_args()
-
-if args.output_embedding:
-    FLAGS.OUTPUT_EMBEDDING = True
-    ckpt_dir = '../models/lm_output_embedding_' + FLAGS.EMBEDDING_TRAINABLE + '_ckpts'
-    train_variables_file = ckpt_dir + '/variables.npz'
-    output_dataset_file = '../data/generated_output_embedding_dataset.h5'
-    output_sentences_file = '../data/generated_output_embedding_dataset_words.txt'
- 
-if args.fast:
-    FLAGS.EPOCHS = 2
     
 print('loading model parameters')
 params = np.load(train_variables_file)
@@ -91,17 +71,10 @@ with h5py.File(dataset_file, 'r') as data_file:
     train_Y = data_file['train_Y'][:]
     test_X = data_file['test_X'][:]
     test_Y = data_file['test_Y'][:]
-
-if args.fast:
-    howmany = 259
-    train_X = train_X[:howmany]
-    train_Y = train_Y[:howmany]
         
 # build model
 print('building model')
 
-# inputs = tf.placeholder(tf.int32, shape=(None, FLAGS.SEQUENCE_LEN), name='inputs')
-# targets = tf.placeholder(tf.int32, shape=(None, FLAGS.SEQUENCE_LEN), name='targets')
 c = tf.placeholder(tf.int32, [None,], 'class')
 dims = tf.stack([tf.shape(c)[0],])
 vague_terms_tensor = tf.constant(vague_terms, dtype=tf.float32)
@@ -111,18 +84,10 @@ def create_vague_weights(vague_terms, fake_c):
     vague_weights = tf.multiply(b,tf.cast(tf.reshape(fake_c*2 - 2, [-1,1]),tf.float32))
     return vague_weights
 vague_weights = create_vague_weights(vague_terms_tensor, c)
-# z = tf.zeros(dtype=tf.float32, shape=[FLAGS.BATCH_SIZE, FLAGS.LATENT_SIZE], name='z')
 z = tf.placeholder(tf.float32, [FLAGS.BATCH_SIZE, FLAGS.LATENT_SIZE], name='z')
-# zero_inputs = tf.unstack(tf.zeros_like(inputs, dtype=tf.int32), axis=1)
 ones = tf.ones(shape=[FLAGS.BATCH_SIZE, FLAGS.SEQUENCE_LEN], dtype=tf.int32)
 start_symbol_input = tf.unstack(ones + ones, axis=1)
-embedding_tensor_fixed = tf.Variable(initial_value=embedding_weights, name='embedding_matrix', trainable=False)
-# embedding_tensor = tf.Variable(initial_value=embedding_weights, name='embedding_matrix')
-# embeddings = tf.nn.embedding_lookup(embedding_tensor, inputs)
 cell = utils.create_cell(1.)
-# embeddings_time_steps = tf.unstack(embeddings, axis=1)
-# outputs, state = tf.contrib.rnn.static_rnn(
-#             cell, embeddings_time_steps, dtype=tf.float32)
 
 def sample_Z(m, n):
     return np.zeros((m, n))
@@ -130,41 +95,23 @@ def sample_Z(m, n):
 def sample_C(m):
     return np.random.randint(low=0, high=FLAGS.NUM_CLASSES, size=m)
 
-if FLAGS.OUTPUT_EMBEDDING:
-    W = tf.Variable(tf.random_normal([FLAGS.LATENT_SIZE, FLAGS.EMBEDDING_SIZE]), name='W')    
-    b = tf.Variable(tf.random_normal([FLAGS.EMBEDDING_SIZE]), name='b')    
-    outputs, states, samples = embedding_rnn_decoder(start_symbol_input,   # is this ok? I'm not sure what giving 0 inputs does (although it should be completely ignoring inputs)
-                                      z,
-                                      cell,
-                                      FLAGS.VOCAB_SIZE,
-                                      FLAGS.EMBEDDING_SIZE,
-                                      output_projection=(W,b),
-                                      feed_previous=True,
-                                      update_embedding_for_previous=True,
-                                      sample_from_distribution=False,
-                                      fixed_embedding=embedding_tensor_fixed,
-                                      hidden_noise_std_dev=FLAGS.HIDDEN_NOISE_STD_DEV,
-                                      vocab_noise_std_dev=FLAGS.VOCAB_NOISE_STD_DEV)
-    #                                   class_embedding=c_embedding)
-    samples = tf.cast(tf.stack(samples, axis=1), tf.int32)
-else:
-    W = tf.Variable(tf.random_normal([FLAGS.LATENT_SIZE, FLAGS.VOCAB_SIZE]), name='W')    
-    b = tf.Variable(tf.random_normal([FLAGS.VOCAB_SIZE]), name='b')    
-    outputs, states, samples, probs = embedding_rnn_decoder(start_symbol_input,   # is this ok? I'm not sure what giving 0 inputs does (although it should be completely ignoring inputs)
-                                      z,
-                                      cell,
-                                      FLAGS.VOCAB_SIZE,
-                                      FLAGS.EMBEDDING_SIZE,
-                                      output_projection=(W,b),
-                                      feed_previous=True,
-                                      update_embedding_for_previous=True,
-                                      sample_from_distribution=FLAGS.SAMPLE,
-                                      vague_weights=vague_weights,
-                                      hidden_noise_std_dev=FLAGS.HIDDEN_NOISE_STD_DEV,
-                                      vocab_noise_std_dev=FLAGS.VOCAB_NOISE_STD_DEV)
-    #                                   class_embedding=c_embedding)
-    samples = tf.cast(tf.stack(samples, axis=1), tf.int32)
-    probs = tf.stack(probs, axis=1)
+W = tf.Variable(tf.random_normal([FLAGS.LATENT_SIZE, FLAGS.VOCAB_SIZE]), name='W')    
+b = tf.Variable(tf.random_normal([FLAGS.VOCAB_SIZE]), name='b')    
+outputs, states, samples, probs = embedding_rnn_decoder(start_symbol_input,   # is this ok? I'm not sure what giving 0 inputs does (although it should be completely ignoring inputs)
+                                  z,
+                                  cell,
+                                  FLAGS.VOCAB_SIZE,
+                                  FLAGS.EMBEDDING_SIZE,
+                                  output_projection=(W,b),
+                                  feed_previous=True,
+                                  update_embedding_for_previous=True,
+                                  sample_from_distribution=FLAGS.SAMPLE,
+                                  vague_weights=vague_weights,
+                                  hidden_noise_std_dev=FLAGS.HIDDEN_NOISE_STD_DEV,
+                                  vocab_noise_std_dev=FLAGS.VOCAB_NOISE_STD_DEV)
+#                                   class_embedding=c_embedding)
+samples = tf.cast(tf.stack(samples, axis=1), tf.int32)
+probs = tf.stack(probs, axis=1)
     
 
 
@@ -174,21 +121,15 @@ output = tf.reshape(tf.stack(axis=1, values=outputs), [-1, FLAGS.LATENT_SIZE])
 # output = tf.nn.dropout(output, 0.5)
 # logits = tf.layers.dense(output, FLAGS.VOCAB_SIZE)
 logits = tf.matmul(output, W) + b
-if FLAGS.OUTPUT_EMBEDDING:
-    logits = tf.layers.dense(output, FLAGS.EMBEDDING_SIZE)
-    logits = tf.reshape(logits, [-1, FLAGS.SEQUENCE_LEN, FLAGS.EMBEDDING_SIZE])
-else:
-    logits = tf.reshape(logits, [-1, FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE])
+logits = tf.reshape(logits, [-1, FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE])
 tvars = tf.trainable_variables()
 tvar_names = [var.name for var in tvars]
     
 assign_ops = []
 for pair in param_names.GRU_TEST_PARAMS.VARIABLE_PAIRS:
     assign_ops.append(utils.assign_variable_op(params, tvars, pair[0], pair[1]))
-# TODO: change to rms optimizer
-# optimizer = tf.train.AdamOptimizer().minimize(cost, var_list=tvars)
 predictions = tf.cast(tf.argmax(logits, axis=2, name='predictions'), tf.int32)
-# samples = tf.stack(samples, axis=1)
+
 def remove_trailing_words(samples):
     batch_size = tf.stack([tf.shape(c)[0],])
     eos = tf.fill(batch_size, 3)

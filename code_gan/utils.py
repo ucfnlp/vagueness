@@ -12,25 +12,13 @@ FLAGS = tf.app.flags.FLAGS
 def create_cell(keep_prob, reuse=False):
     if FLAGS.CELL_TYPE == 'LSTM':
         cell = BasicLSTMCell(num_units=FLAGS.LATENT_SIZE, activation=tf.nn.tanh,
-                              state_is_tuple=False, reuse=reuse)
+                              state_is_tuple=True, reuse=reuse)
     elif FLAGS.CELL_TYPE == 'BASIC_RNN':
         cell = BasicRNNCell(num_units=FLAGS.LATENT_SIZE, activation=tf.nn.tanh, reuse=reuse)
     elif FLAGS.CELL_TYPE == 'GRU':
         cell = GRUCell(num_units=FLAGS.LATENT_SIZE, activation=tf.nn.tanh, reuse=reuse)
     cell = tf.contrib.rnn.DropoutWrapper(cell, output_keep_prob=keep_prob, seed=FLAGS.RANDOM_SEED)
     return cell
-
-def get_closest_word_by_embedding(logits, embedding_tensor_fixed):
-    reshaped_logits = tf.reshape(logits, [-1, FLAGS.EMBEDDING_SIZE])
-    normed_embedding = tf.nn.l2_normalize(embedding_tensor_fixed, dim=1)
-    normed_array = tf.nn.l2_normalize(reshaped_logits, dim=1)
-    cosine_similarity = tf.matmul(normed_array, tf.transpose(normed_embedding, [1, 0]))
-    if len(logits.get_shape().as_list()) == 3:
-        predictions = tf.cast(tf.reshape(tf.argmax(cosine_similarity, 1), 
-                                         [-1, FLAGS.SEQUENCE_LEN]), tf.int32) 
-    elif len(logits.get_shape().as_list()) == 2:
-        predictions = tf.cast(tf.argmax(cosine_similarity, 1), tf.int32) 
-    return predictions
 
 def gaussian_noise_layer(input_layer, std=1.0):
     noise = tf.random_normal(shape=tf.shape(input_layer), mean=0.0, stddev=std, dtype=tf.float32) 
@@ -72,8 +60,9 @@ def variable_summaries(vars):
         tf.summary.histogram(var.name + ' histogram', var)
     
 class Metrics:
-    def __init__(self):
+    def __init__(self, is_binary=False):
         self.metrics_collections = []
+        self.averaging_method = 'binary' if is_binary else 'weighted'
         
     def print_and_save_metrics(self, y_true, y_pred):
         self.print_metrics(y_true, y_pred)
@@ -81,9 +70,9 @@ class Metrics:
         
     def save_metrics_for_fold(self, y_true, y_pred):
         self.metrics_collections.append( [metrics.accuracy_score(y_true, y_pred),
-                metrics.precision_score(y_true, y_pred, average='weighted'),
-                metrics.recall_score(y_true, y_pred, average='weighted'),
-                metrics.f1_score(y_true, y_pred, average='weighted')] )
+                metrics.precision_score(y_true, y_pred, average=self.averaging_method),
+                metrics.recall_score(y_true, y_pred, average=self.averaging_method),
+                metrics.f1_score(y_true, y_pred, average=self.averaging_method)] )
         
     def print_metrics(self, y_true, y_pred):
         print ('Performance Metrics\n-------------------\n')

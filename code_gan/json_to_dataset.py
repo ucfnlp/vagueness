@@ -12,7 +12,6 @@ import h5py
 import gensim
 from gensim.models.word2vec import Word2Vec
 from numpy import nan_to_num
-from odo.backends.pandas import categorical
 
 numpy.random.seed(123)
 from keras.preprocessing.text import Tokenizer
@@ -35,7 +34,7 @@ vague_phrases_file = '../data/vague_phrases.txt'
 sentence_level_figure_file = '../data/sentence_level_distribution.png'
 
  
-vocab_size = 5000
+vocab_size = 10000
 embedding_dim = 300
 maxlen = 50
 batch_size = 128
@@ -58,20 +57,23 @@ Output
 labels: list of integers (0 or 1), one element for each word in the sentence
     0 = not a vague word
     1 = vague word
+count: number of vague terms in sentence
 '''
 def labelVagueWords(sentence, vague_phrases):
+    num_vague_terms = 0
     labels = [0] * len(sentence)
     for phrase, count in vague_phrases.iteritems():
         if count >= vague_phrase_threshold:
-            phrase = phrase.strip().split()
+            phrase = phrase.lower().strip().split()
             word_idx = 0
             for i in range(len(sentence)):
                 if i + len(phrase) >= len(sentence): break
                 if sentence[i:i+len(phrase)] ==  phrase:
                     labels[i:i+len(phrase)] = [1] * len(phrase)
+                    num_vague_terms += 1
     if len(labels) != len(sentence):
         raise ValueError('len labels does not equal len sentence')
-    return labels
+    return labels, num_vague_terms
 
 # read in existing dictionary created by preprocess_unannotated.py
 print('loading dictionary')
@@ -91,6 +93,7 @@ total_vague_terms = 0
 total_terms = 0
 total_vague_sents = 0
 stds = []
+num_vague_terms_list = []
 
 # load file, one sentence per line
 sentences = []
@@ -102,7 +105,7 @@ start_tag = ['<s>']
 end_tag = ['</s>']
 for doc in data['docs']:
     for sent in doc['vague_sentences']:
-        words = sent['sentence_str'].strip().split()
+        words = sent['sentence_str'].lower().strip().split()
         if len(words) == 0:
             continue
         words = start_tag + words + end_tag
@@ -113,7 +116,7 @@ for doc in data['docs']:
         Y_sentence.append(numpy.nan_to_num(numpy.average(scores)))
         
         # Get word-level vagueness
-        word_labels = labelVagueWords(words, sent['vague_phrases'])
+        word_labels, num_vague_terms = labelVagueWords(words, sent['vague_phrases'])
         Y_word.append(word_labels)
         
         # Store the document ID
@@ -121,8 +124,9 @@ for doc in data['docs']:
         
         # Calculate statistics
         total_terms += len(word_labels)
-        num_vague_terms = sum(x == 1 for x in word_labels)
+#         num_vague_words = sum(x == 1 for x in word_labels)
         total_vague_terms += num_vague_terms
+        num_vague_terms_list.append(num_vague_terms)
         if num_vague_terms > 0: 
             total_vague_sents += 1
         std = numpy.std(scores)
@@ -145,6 +149,16 @@ print('average standard deviation of scores for each sentence: %f' % (numpy.aver
 # plt.ylabel("Number of Sentences")
 # plt.show()
 
+hist = np.histogram(Y_sentence, 8, (1,5))
+hist2 = np.histogram(Y_sentence, 4, (1,5))
+print('Histogram', hist)
+print('Histogram2', hist2)
+
+bins = [0,1,2,3,4,5,6,100000]
+num_vague_terms_histogram, _ = np.histogram(num_vague_terms_list, bins=bins)
+num_vague_terms_probs = [1.*val/sum(num_vague_terms_histogram) for val in num_vague_terms_histogram]
+print('Number of sentences with numbers of vague terms. ' + 
+      'Last bin is all sentences with greater than 5 vague terms.', num_vague_terms_probs, bins)
 # convert from float to category (possible categories: {0,1,2,3})
 for idx, item in enumerate(Y_sentence):
     res = math.floor(item)
@@ -223,12 +237,17 @@ for sent in sentences:
 # outfile.flush()
 # outfile.close()
 
+# weights used later for calculating the loss, so that it doesn't include padding
+lengths = [len(seq) for seq in word_id_seqs]
+weights = [[1]*length for length in lengths] 
+
 # Pad X and Y
 X = word_id_seqs
 X_padded = pad_sequences(X, maxlen=maxlen, padding='post')
 Y_padded_word = pad_sequences(Y_word, maxlen=maxlen, padding='post')
+weights_padded = pad_sequences(weights, maxlen=maxlen, padding='post')
 Y_sentence = numpy.asarray(Y_sentence, dtype=numpy.int32)
-Y_padded_word = Y_padded_word.reshape(Y_padded_word.shape[0], Y_padded_word.shape[1], 1)
+# Y_padded_word = Y_padded_word.reshape(Y_padded_word.shape[0], Y_padded_word.shape[1], 1)
 
 # shuffle Documents
 doc_ids = set()
@@ -242,15 +261,15 @@ val_len = int(validation_ratio*len(doc_ids))
 outfile = h5py.File(dataset_file, 'w')
 outfile.create_dataset('X', data=X_padded)
 outfile.create_dataset('Y', data=Y_sentence)
-
+ 
 def get_all_except_one(my_list, exclude_idx):
     return [x for i,x in enumerate(my_list) if i!=exclude_idx]
-
+ 
 folds = np.array_split(doc_ids,num_folds)
 for fold_idx, fold in enumerate(folds):
     train_folds = get_all_except_one(folds, fold_idx)
     test_fold = fold
-
+ 
     def flatten_list_of_lists(list_of_lists):
         flatten = lambda l: [item for sublist in l for item in sublist]
         return flatten(list_of_lists)
@@ -259,7 +278,7 @@ for fold_idx, fold in enumerate(folds):
     val_doc_ids = train_val_doc_ids[:val_len]
     train_doc_ids = train_val_doc_ids[val_len:]
     test_doc_ids = test_fold
-    
+     
     # Split into train and test, keeping documents together
     train_indices = []
     val_indices = []
@@ -277,39 +296,48 @@ for fold_idx, fold in enumerate(folds):
     train_X = X_padded[train_indices]
     train_Y_word = Y_padded_word[train_indices]
     train_Y_sentence = Y_sentence[train_indices]
+    train_weights = weights_padded[train_indices]
     val_X = X_padded[val_indices]
     val_Y_word = Y_padded_word[val_indices]
     val_Y_sentence = Y_sentence[val_indices]
+    val_weights = weights_padded[val_indices]
     test_X = X_padded[test_indices]
     test_Y_word = Y_padded_word[test_indices]
     test_Y_sentence = Y_sentence[test_indices]
-    
+    test_weights = weights_padded[test_indices]
+     
     #shuffle
-            
+             
     permutation = numpy.random.permutation(train_X.shape[0])
     train_X = train_X[permutation]
     train_Y_word = train_Y_word[permutation]
     train_Y_sentence = train_Y_sentence[permutation]
+    train_weights = train_weights[permutation]
     permutation = numpy.random.permutation(val_X.shape[0])
     val_X = val_X[permutation]
     val_Y_word = val_Y_word[permutation]
     val_Y_sentence = val_Y_sentence[permutation]
+    val_weights = val_weights[permutation]
     permutation = numpy.random.permutation(test_X.shape[0])
     test_X = test_X[permutation]
     test_Y_word = test_Y_word[permutation]
     test_Y_sentence = test_Y_sentence[permutation]
-    
+    test_weights = test_weights[permutation]
+     
     # Save preprocessed dataset to file
     grp = outfile.create_group('fold' + str(fold_idx))
     grp.create_dataset('train_X', data=train_X)
     grp.create_dataset('train_Y_word', data=train_Y_word)
     grp.create_dataset('train_Y_sentence', data=train_Y_sentence)
+    grp.create_dataset('train_weights', data=train_weights)
     grp.create_dataset('val_X', data=val_X)
     grp.create_dataset('val_Y_word', data=val_Y_word)
     grp.create_dataset('val_Y_sentence', data=val_Y_sentence)
+    grp.create_dataset('val_weights', data=val_weights)
     grp.create_dataset('test_X', data=test_X)
     grp.create_dataset('test_Y_word', data=test_Y_word)
     grp.create_dataset('test_Y_sentence', data=test_Y_sentence)
+    grp.create_dataset('test_weights', data=test_weights)
 outfile.flush()
 outfile.close()
 

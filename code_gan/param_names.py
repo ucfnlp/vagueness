@@ -4,6 +4,8 @@ TRAIN_GRU_GATES_WEIGHTS = 'rnn/gru_cell/gates/weights:0'
 TRAIN_GRU_GATES_BIASES = 'rnn/gru_cell/gates/biases:0'
 TRAIN_GRU_CANDIDATE_WEIGHTS = 'rnn/gru_cell/candidate/weights:0'
 TRAIN_GRU_CANDIDATE_BIASES = 'rnn/gru_cell/candidate/biases:0'
+TRAIN_LSTM_WEIGHTS = 'rnn/basic_lstm_cell/kernel:0'
+TRAIN_LSTM_BIASES = 'rnn/basic_lstm_cell/bias:0'
 TRAIN_OUTPUT_WEIGHTS = 'dense/kernel:0'
 TRAIN_OUTPUT_BIASES = 'dense/bias:0'
 
@@ -16,6 +18,8 @@ TEST_GRU_GATES_BIASES = 'embedding_rnn_decoder/rnn_decoder/gru_cell/gates/bias:0
 TEST_GRU_CANDIDATE_WEIGHTS = 'embedding_rnn_decoder/rnn_decoder/gru_cell/candidate/kernel:0'
 # TEST_GRU_CANDIDATE_BIASES = 'embedding_rnn_decoder/rnn_decoder/gru_cell/candidate/biases:0'
 TEST_GRU_CANDIDATE_BIASES = 'embedding_rnn_decoder/rnn_decoder/gru_cell/candidate/bias:0'
+TEST_LSTM_WEIGHTS = 'embedding_rnn_decoder/rnn_decoder/basic_lstm_cell/kernel:0'
+TEST_LSTM_BIASES = 'embedding_rnn_decoder/rnn_decoder/basic_lstm_cell/bias:0'
 TEST_OUTPUT_WEIGHTS = 'W:0'
 TEST_OUTPUT_BIASES = 'b:0'
 
@@ -37,6 +41,8 @@ GEN_GRU_GATES_WEIGHTS = 'G_/' + TEST_GRU_GATES_WEIGHTS
 GEN_GRU_GATES_BIASES = 'G_/' + TEST_GRU_GATES_BIASES
 GEN_GRU_CANDIDATE_WEIGHTS = 'G_/' + TEST_GRU_CANDIDATE_WEIGHTS
 GEN_GRU_CANDIDATE_BIASES = 'G_/' + TEST_GRU_CANDIDATE_BIASES
+GEN_LSTM_WEIGHTS = 'G_/' + TEST_LSTM_WEIGHTS
+GEN_LSTM_BIASES = 'G_/' + TEST_LSTM_BIASES
 GEN_OUTPUT_WEIGHTS = 'G_/' + 'output_weights:0'
 GEN_OUTPUT_BIASES = 'G_/' + 'output_biases:0'
 
@@ -73,6 +79,15 @@ class GAN_PARAMS:
 
 	VARIABLE_PAIRS = [EMBEDDING, GRU_GATES_WEIGHTS, GRU_GATES_BIASES, GRU_CANDIDATE_WEIGHTS, 
 						GRU_CANDIDATE_BIASES, OUTPUT_WEIGHTS, OUTPUT_BIASES]
+	
+class GAN_LSTM_PARAMS:
+	EMBEDDING = (TRAIN_EMBEDDING, GAN_EMBEDDING)
+	LSTM_WEIGHTS = (TRAIN_LSTM_WEIGHTS, GEN_GRU_GATES_WEIGHTS)
+	LSTM_BIASES = (TRAIN_LSTM_BIASES, GEN_GRU_GATES_BIASES)
+	OUTPUT_WEIGHTS = (TRAIN_OUTPUT_WEIGHTS, GEN_OUTPUT_WEIGHTS)
+	OUTPUT_BIASES = (TRAIN_OUTPUT_BIASES, GEN_OUTPUT_BIASES)
+
+	VARIABLE_PAIRS = [EMBEDDING, LSTM_WEIGHTS, LSTM_BIASES, OUTPUT_WEIGHTS, OUTPUT_BIASES]
 	
 	
 	

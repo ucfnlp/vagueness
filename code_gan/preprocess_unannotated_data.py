@@ -6,7 +6,8 @@ import codecs
 import operator
 import h5py
 import gensim
-from gensim.models.word2vec import Word2Vec
+# from gensim.models.word2vec import Word2Vec
+from gensim.models import KeyedVectors
 import cPickle
 import yaml
 
@@ -25,7 +26,7 @@ dataset_file = data_folder + 'dataset.h5'
 embedding_weights_file = data_folder + 'embedding_weights.h5'
 annotated_file = data_folder + 'clean_data.json'
  
-vocab_size = 5000
+vocab_size = 10000
 embedding_dim = 300
 maxlen = 50
 batch_size = 128
@@ -132,7 +133,7 @@ print('total vague sentences: %d' % (total_vague_sents))
 print('total terms: %d' % (total_terms))
            
 # prepare embedding weights
-word2vec_model = Word2Vec.load_word2vec_format(embedding_file, binary=True)
+word2vec_model = KeyedVectors.load_word2vec_format(embedding_file, binary=True)
 embedding_weights = numpy.zeros((vocab_size, embedding_dim), dtype='float32')
    
 n_words_in_word2vec = 0
@@ -151,24 +152,32 @@ outfile = h5py.File(embedding_weights_file, 'w')
 outfile.create_dataset('embedding_weights', data=embedding_weights)
 outfile.flush()
 outfile.close()
+
+# weights used later for calculating the loss, so that it doesn't include padding
+lengths = [len(seq) for seq in Y_raw]
+weights = [[1]*length for length in lengths] 
         
 X_padded = pad_sequences(X_raw, maxlen=maxlen, padding='post')
 Y_padded = pad_sequences(Y_raw, maxlen=maxlen, padding='post')
 Y_padded_vague = pad_sequences(Y_vague, maxlen=maxlen, padding='post')
 Y_padded_vague = Y_padded_vague.reshape(Y_padded_vague.shape[0], Y_padded_vague.shape[1], 1)
+weights_padded = pad_sequences(weights, maxlen=maxlen, padding='post')
 
 # split train and test
 permutation = numpy.random.permutation(X_padded.shape[0])
 X_padded = X_padded[permutation]
 Y_padded = Y_padded[permutation]
 Y_padded_vague = Y_padded_vague[permutation]
+weights_padded = weights_padded[permutation]
 train_len = int(len(X_padded) * train_ratio)
 train_X_padded = X_padded[:train_len]
 train_Y_padded = Y_padded[:train_len]
 train_Y_padded_vague = Y_padded_vague[:train_len]
+train_weights_padded = weights_padded[:train_len]
 test_X_padded = X_padded[train_len:]
 test_Y_padded = Y_padded[train_len:]
 test_Y_padded_vague = Y_padded_vague[train_len:]
+test_weights_padded = weights_padded[train_len:]
     
 # # truncate because of keras's predict generator bug
 # len_test = test_X_padded.shape[0] - (test_X_padded.shape[0] % val_samples)
@@ -176,14 +185,17 @@ len_test = test_X_padded.shape[0]
 test_X_padded = test_X_padded[:len_test]
 test_Y_padded = test_Y_padded[:len_test]
 test_Y_padded_vague = test_Y_padded_vague[:len_test]
+test_weights_padded = test_weights_padded[:len_test]
 
 outfile = h5py.File(dataset_file, 'w')
 outfile.create_dataset('train_X', data=train_X_padded)
 outfile.create_dataset('train_Y', data=train_Y_padded)
 outfile.create_dataset('train_Y_vague', data=train_Y_padded_vague)
+outfile.create_dataset('train_weights', data=train_weights_padded)
 outfile.create_dataset('test_X', data=test_X_padded)
 outfile.create_dataset('test_Y', data=test_Y_padded)
 outfile.create_dataset('test_Y_vague', data=test_Y_padded_vague)
+outfile.create_dataset('test_weights', data=test_weights_padded)
 outfile.flush()
 outfile.close()
 

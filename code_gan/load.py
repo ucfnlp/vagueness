@@ -11,7 +11,8 @@ unannotated_dataset_file = os.path.join('..','data','dataset.h5')
 generated_dataset_file = os.path.join('..','data','generated_dataset.h5')
 embedding_weights_file = os.path.join('..','data','embedding_weights.h5')
 dictionary_file = os.path.join('..','data','words.dict')
-train_variables_file = os.path.join('..','models','tf_lm_variables.npz')
+# train_variables_file = os.path.join('..','models', 'lm_ckpts', 'tf_lm_variables.npz')
+train_variables_file = os.path.join('..','models', 'tf_lm_variables.npz')
 vague_terms_file = os.path.join('..','data','vague_terms')
     
 def load_annotated_data(fold_num=0):
@@ -19,13 +20,25 @@ def load_annotated_data(fold_num=0):
     with h5py.File(annotated_dataset_file, 'r') as data_file:
         fold = data_file['fold'+str(fold_num)]
         train_x = fold['train_X'][:]
-        train_y = fold['train_Y_sentence'][:]
+        train_y_word = fold['train_Y_word'][:]
+        train_y_sentence = fold['train_Y_sentence'][:]
+        train_weights = fold['train_weights'][:]
         val_x = fold['val_X'][:]
-        val_y = fold['val_Y_sentence'][:]
+        val_y_word = fold['val_Y_word'][:]
+        val_y_sentence = fold['val_Y_sentence'][:]
+        val_weights = fold['val_weights'][:]
         test_x = fold['test_X'][:]
-        test_y = fold['test_Y_sentence'][:]
-    print ('Number of training instances: ' + str(train_y.shape[0]))
+        test_y_word = fold['test_Y_word'][:]
+        test_y_sentence = fold['test_Y_sentence'][:]
+        test_weights = fold['test_weights'][:]
+    print ('Number of training instances: ' + str(train_y_sentence.shape[0]))
     # Remove </s> symbols
+    train_y_word[train_x == 3] = 0
+    val_y_word[val_x == 3] = 0
+    test_y_word[test_x == 3] = 0
+    train_weights[train_x == 3] = 0
+    val_weights[val_x == 3] = 0
+    test_weights[test_x == 3] = 0
     train_x[train_x == 3] = 0
     val_x[val_x == 3] = 0
     test_x[test_x == 3] = 0
@@ -33,6 +46,12 @@ def load_annotated_data(fold_num=0):
     train_x = shift(train_x, [0,-1], cval=0)
     val_x = shift(val_x, [0,-1], cval=0)
     test_x = shift(test_x, [0,-1], cval=0)
+    train_y_word = shift(train_y_word, [0,-1], cval=0)
+    val_y_word = shift(val_y_word, [0,-1], cval=0)
+    test_y_word = shift(test_y_word, [0,-1], cval=0)
+    train_weights = shift(train_weights, [0,-1], cval=0)
+    val_weights = shift(val_weights, [0,-1], cval=0)
+    test_weights = shift(test_weights, [0,-1], cval=0)
     
             
 #     print train_x
@@ -43,16 +62,18 @@ def load_annotated_data(fold_num=0):
 #             word = d[train_x[i][j]]
 #             print word + ' ',
 #         print '(' + str(train_y[i]) + ')\n'
-    return train_x, train_y, val_x, val_y, test_x, test_y
+    return train_x, train_y_word, train_y_sentence, train_weights, val_x, val_y_word, val_y_sentence, val_weights, test_x, test_y_word, test_y_sentence, test_weights
 
 def load_unannotated_dataset():
     print('loading training and test data')
     with h5py.File(unannotated_dataset_file, 'r') as data_file:
         train_X = data_file['train_X'][:]
         train_Y = data_file['train_Y'][:]
+        train_weights = data_file['train_weights'][:]
         test_X = data_file['test_X'][:]
         test_Y = data_file['test_Y'][:]
-    return train_X, train_Y, test_X, test_Y
+        test_weights = data_file['test_weights'][:]
+    return train_X, train_Y, train_weights, test_X, test_Y, test_weights
 
 def load_generated_data():
     print('loading training and test data')

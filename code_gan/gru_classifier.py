@@ -11,11 +11,27 @@ import argparse
 from sklearn import metrics
 import sys
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--train_only", help="run in train mode only",
+                    action="store_true")
+parser.add_argument("--test_only", help="run in test mode only",
+                    action="store_true")
+parser.add_argument("--one_fold", help="perform only on one fold instead of five-fold cross validation",
+                    action="store_true")
+parser.add_argument("--generated_dataset", help="use the generated dataset rather than the manually annotated dataset",
+                    action="store_true")
+args = parser.parse_args()
+
+if args.generated_dataset:
+    prediction_words_file = '/predictions_words_gru_classifier_unsupervised'
+    ckpt_dir = '../models/gru_classifier_unsupervised_ckpts'
+else:
+    prediction_words_file = '/predictions_words_gru_classifier'
+    ckpt_dir = '../models/gru_classifier_ckpts'
+
 prediction_folder = '../predictions'
-prediction_words_file = '/predictions_words_gru_classifier'
 summary_file = '/home/logan/tmp'
 # train_variables_file = '../models/tf_enc_dec_variables.npz'
-ckpt_dir = '../models/gru_classifier_ckpts'
 use_checkpoint = False
 num_folds = 5
 
@@ -24,7 +40,7 @@ start_time = time.time()
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_integer('EPOCHS', 50,
                             'Num epochs.')
-tf.app.flags.DEFINE_integer('VOCAB_SIZE', 5000,
+tf.app.flags.DEFINE_integer('VOCAB_SIZE', 10000,
                             'Number of words in the vocabulary.')
 tf.app.flags.DEFINE_integer('LATENT_SIZE', 512,
                             'Size of both the hidden state of RNN and random vector z.')
@@ -32,7 +48,7 @@ tf.app.flags.DEFINE_integer('SEQUENCE_LEN', 50,
                             'Max length for each sentence.')
 tf.app.flags.DEFINE_integer('EMBEDDING_SIZE', 300,
                             'Max length for each sentence.')
-tf.app.flags.DEFINE_integer('PATIENCE', 10,
+tf.app.flags.DEFINE_integer('PATIENCE', 5,
                             'Max length for each sentence.')
 tf.app.flags.DEFINE_integer('BATCH_SIZE', 64,
                             'Max length for each sentence.')
@@ -40,7 +56,7 @@ tf.app.flags.DEFINE_integer('NUM_CLASSES', 4,
                             'Max length for each sentence.')
 tf.app.flags.DEFINE_integer('CLASS_EMBEDDING_SIZE', 1,
                             'Max length for each sentence.')
-tf.app.flags.DEFINE_string('CELL_TYPE', 'GRU',
+tf.app.flags.DEFINE_string('CELL_TYPE', 'LSTM',
                             'Which RNN cell for the RNNs.')
 tf.app.flags.DEFINE_string('MODE', 'TRAIN',
                             'Whether to run in train or test mode.')
@@ -102,8 +118,7 @@ accuracy = tf.reduce_mean(tf.cast(tf.equal(predictions, targets), "float"))
 global_step = tf.Variable(-1, name='global_step', trainable=False)
 saver = tf.train.Saver()
 
-for var in tvars:
-    utils.variable_summaries(var) 
+utils.variable_summaries(tvars) 
 merged = tf.summary.merge_all()
     
 def validate(sess, val_x, val_y):
@@ -222,43 +237,42 @@ def test(test_x, test_y, fold_num):
         predictions_indices, _ = predict(sess, test_x, test_y)
         Metrics.print_and_save_metrics(test_y, predictions_indices)
         
-def run_on_fold(args, fold_num):
+        
+def run_on_fold(mode, fold_num):
     if args.generated_dataset:
-        train_x, train_y, val_x, val_y, test_x, test_y = load.load_generated_data(fold_num)
+        train_x, train_y, val_x, val_y, test_x, test_y = load.load_generated_data()
     else:
-        train_x, train_y, val_x, val_y, test_x, test_y = load.load_annotated_data(fold_num)
+        train_x, _, train_y, _, val_x, _, val_y, _, test_x, _, test_y, _ = load.load_annotated_data(fold_num)
 #     args.train = True
-    if args.train:
+    if mode == 'train':
         train(train_x, train_y, val_x, val_y, fold_num)
     else:
         test(test_x, test_y, fold_num)
-    
         
+def run_in_mode(mode, one_fold):
+    if one_fold:
+        run_on_fold(mode, 0)
+    else:
+        for fold_num in range(num_folds):
+            run_on_fold(mode, fold_num)
+    if mode == 'test':
+        Metrics.print_metrics_for_all_folds()
     
 def main(unused_argv):
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--train", help="run in train mode",
-                        action="store_true")
-    parser.add_argument("--xval", help="perform five-fold cross validation",
-                        action="store_true")
-    parser.add_argument("--generated_dataset", help="use the generated dataset rather than the manually annotated dataset",
-                        action="store_true")
-    args = parser.parse_args()
-    if args.xval:
-        for fold_num in range(num_folds):
-            run_on_fold(args, fold_num)
-        if not args.train:
-            Metrics.print_metrics_for_all_folds()
-    else:
-        run_on_fold(args, 0)
+    if args.train_only and args.test_only: raise Exception('provide only one mode')
+    train = args.train_only or not args.test_only
+    test = not args.train_only or args.test_only
+    if train:
+        run_in_mode('train', args.one_fold)
+    if test:
+        run_in_mode('test', args.one_fold)
+        
 
     localtime = time.asctime( time.localtime(time.time()) )
-    print "Finished at: ", localtime       
+    print ("Finished at: ", localtime     )
     print('Execution time: ', (time.time() - start_time)/3600., ' hours')
     
 if __name__ == '__main__':
   tf.app.run()
-    
-    
     
     

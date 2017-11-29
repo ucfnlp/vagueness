@@ -19,7 +19,7 @@ fast = False
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_integer('EPOCHS', 20,
                             'Num epochs.')
-tf.app.flags.DEFINE_integer('VOCAB_SIZE', 5000,
+tf.app.flags.DEFINE_integer('VOCAB_SIZE', 10000,
                             'Number of words in the vocabulary.')
 tf.app.flags.DEFINE_integer('LATENT_SIZE', 512,
                             'Size of both the hidden state of RNN and random vector z.')
@@ -29,14 +29,10 @@ tf.app.flags.DEFINE_integer('EMBEDDING_SIZE', 300,
                             'Max length for each sentence.')
 tf.app.flags.DEFINE_integer('PATIENCE', 200,
                             'Max length for each sentence.')
-tf.app.flags.DEFINE_integer('BATCH_SIZE', 128,
+tf.app.flags.DEFINE_integer('BATCH_SIZE', 64,
                             'Max length for each sentence.')
-tf.app.flags.DEFINE_string('CELL_TYPE', 'GRU',
+tf.app.flags.DEFINE_string('CELL_TYPE', 'LSTM',
                             'Which RNN cell for the RNNs.')
-tf.app.flags.DEFINE_boolean('OUTPUT_EMBEDDING', False,
-                            'If true, output layer is the embedding size, otherwise the vocab size.')
-tf.app.flags.DEFINE_string('EMBEDDING_TRAINABLE', 'mixed',
-                            'trainable, fixed, or mixed')
 tf.app.flags.DEFINE_integer('RANDOM_SEED', 123,
                             'Random seed used for numpy and tensorflow (dropout, sampling)')
 tf.set_random_seed(FLAGS.RANDOM_SEED)
@@ -48,18 +44,7 @@ parser.add_argument("--fast", help="run in fast mode for testing",
                     action="store_true")
 parser.add_argument("--resume", help="resume from last saved epoch",
                     action="store_true")
-parser.add_argument("--output_embedding", help="If true, output layer is the embedding size, otherwise the vocab size.",
-                    action="store_true")
 args = parser.parse_args()
-
-input_embedding_trainable = True
-output_embedding_tied_to_input = False
-if args.output_embedding:
-    FLAGS.OUTPUT_EMBEDDING = True
-    ckpt_dir = '../models/lm_output_embedding_' + FLAGS.EMBEDDING_TRAINABLE + '_ckpts'
-    variables_file = ckpt_dir + '/variables.npz'
-    input_embedding_trainable = FLAGS.EMBEDDING_TRAINABLE == 'trainable' or FLAGS.EMBEDDING_TRAINABLE == 'mixed'
-    output_embedding_tied_to_input = FLAGS.EMBEDDING_TRAINABLE == 'trainable'
  
 if args.fast or fast:
     FLAGS.EPOCHS = 2
@@ -69,7 +54,7 @@ if not os.path.exists(ckpt_dir):
     
 embedding_weights = load.load_embedding_weights()
 d, word_to_id = load.load_dictionary()
-train_X, train_Y, test_X, test_Y = load.load_unannotated_dataset()
+train_X, train_Y, train_weights, test_X, test_Y, test_weights = load.load_unannotated_dataset()
 
 if args.fast or fast:
     howmany = 259
@@ -79,16 +64,9 @@ if args.fast or fast:
 print('building model')
 inputs = tf.placeholder(tf.int32, shape=(None, FLAGS.SEQUENCE_LEN), name='inputs')
 targets = tf.placeholder(tf.int32, shape=(None, FLAGS.SEQUENCE_LEN), name='targets')
-embedding_tensor = tf.Variable(initial_value=embedding_weights, name='embedding_matrix', trainable=input_embedding_trainable)
-if output_embedding_tied_to_input:
-    embedding_tensor_fixed = embedding_tensor
-else:
-    embedding_tensor_fixed = tf.Variable(initial_value=embedding_weights, name='embedding_matrix', trainable=False)
+weights = tf.placeholder(tf.float32, shape=(None, FLAGS.SEQUENCE_LEN), name='weights')
+embedding_tensor = tf.Variable(initial_value=embedding_weights, name='embedding_matrix')
 embeddings = tf.nn.embedding_lookup(embedding_tensor, inputs)
-if FLAGS.OUTPUT_EMBEDDING:
-    targets_embedded = tf.nn.embedding_lookup(embedding_tensor_fixed, targets)
-else:
-    targets_embedded = targets
 cell = utils.create_cell(1.)
 embeddings_time_steps = tf.unstack(embeddings, axis=1)
 outputs, state = tf.contrib.rnn.static_rnn(
@@ -98,35 +76,25 @@ outputs, state = tf.contrib.rnn.static_rnn(
 output = tf.reshape(tf.stack(axis=1, values=outputs), [-1, FLAGS.LATENT_SIZE])
 # output = tf.nn.dropout(output, 0.5)
 
-if FLAGS.OUTPUT_EMBEDDING:
-    logits = tf.layers.dense(output, FLAGS.EMBEDDING_SIZE)
-    logits = tf.reshape(logits, [-1, FLAGS.SEQUENCE_LEN, FLAGS.EMBEDDING_SIZE])
-    loss = tf.pow(targets_embedded - logits, 2)
-else:
-    logits = tf.layers.dense(output, FLAGS.VOCAB_SIZE)
-    logits = tf.reshape(logits, [-1, FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE])
-    loss = tf.contrib.seq2seq.sequence_loss(
-            logits,
-            targets,
-            tf.ones_like(inputs, dtype=tf.float32),
-            average_across_timesteps=False,
-            average_across_batch=True
-        )
+logits = tf.layers.dense(output, FLAGS.VOCAB_SIZE)
+logits = tf.reshape(logits, [-1, FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE])
+loss = tf.contrib.seq2seq.sequence_loss(
+        logits,
+        targets,
+        weights,
+        average_across_timesteps=False,
+        average_across_batch=True
+    )
 cost = tf.reduce_sum(loss)
 tvars = tf.trainable_variables()
 tvar_names = [var.name for var in tvars]
 # TODO: change to rms optimizer
 optimizer = tf.train.AdamOptimizer().minimize(cost, var_list=tvars)
-if FLAGS.OUTPUT_EMBEDDING:
-    reshaped_logits = tf.reshape(logits, [-1, FLAGS.EMBEDDING_SIZE])
-    normed_embedding = tf.nn.l2_normalize(embedding_tensor_fixed, dim=1)
-    normed_array = tf.nn.l2_normalize(reshaped_logits, dim=1)
-    cosine_similarity = tf.matmul(normed_array, tf.transpose(normed_embedding, [1, 0]))
-    predictions = tf.cast(tf.reshape(tf.argmax(cosine_similarity, 1), 
-                                     [-1, FLAGS.SEQUENCE_LEN]), tf.int32) 
-else:
-    predictions = tf.cast(tf.argmax(logits, axis=2, name='predictions'), tf.int32)
-accuracy = tf.reduce_mean(tf.cast(tf.equal(predictions, targets), "float"))
+predictions = tf.cast(tf.argmax(logits, axis=2, name='predictions'), tf.int32)
+total = tf.reduce_sum(weights)
+# accuracy = tf.reduce_mean(tf.cast(tf.equal(predictions, targets), "float"))
+correct_predictions = tf.logical_and(tf.equal(predictions, targets), tf.cast(weights, tf.bool))
+accuracy = tf.reduce_sum(tf.cast(correct_predictions, "float"))/total
 
 
 global_step = tf.Variable(-1, name='global_step', trainable=False)
@@ -138,12 +106,13 @@ def idx_to_categorical(y, num_categories):
     categorical_y = categorical_y.reshape(-1, y.shape[1], num_categories)
     return categorical_y
 
-def batch_generator(x, y):
+def batch_generator(x, y, weights):
     data_len = x.shape[0]
     for i in range(0, data_len, FLAGS.BATCH_SIZE):
         batch_x = x[i:min(i+FLAGS.BATCH_SIZE,data_len)]
         batch_y = y[i:min(i+FLAGS.BATCH_SIZE,data_len)]
-        yield batch_x, batch_y, i, data_len
+        batch_weights = weights[i:min(i+FLAGS.BATCH_SIZE,data_len)]
+        yield batch_x, batch_y, batch_weights, i, data_len
 
 with tf.Session() as sess:
     # Create a saver.
@@ -162,15 +131,16 @@ with tf.Session() as sess:
     print "Start from:", start
         
     for cur_epoch in range(start, FLAGS.EPOCHS):
-        for batch_x, batch_y, cur, data_len in batch_generator(train_X, train_Y):
+        for batch_x, batch_y, batch_weights, cur, data_len in batch_generator(train_X, train_Y, train_weights):
             batch_cost, batch_accuracy, batch_logits, _ = sess.run([cost, accuracy, logits, optimizer], 
-                                                     feed_dict={inputs:batch_x, targets:batch_y})
+                                         feed_dict={inputs:batch_x, targets:batch_y, weights:batch_weights})
             
             test_batch_x = test_X[:FLAGS.BATCH_SIZE]
             test_batch_y = test_Y[:FLAGS.BATCH_SIZE]
             preds = sess.run(predictions, 
                          feed_dict={inputs:test_batch_x[:FLAGS.BATCH_SIZE], targets:test_batch_y})
-            for i in range(min(2, len(preds))):
+            for i in range(min(5, len(preds))):
+                print d[test_batch_x[i][0]]
                 for j in range(len(preds[i])):
                     if test_batch_y[i][j] == 0:
                         print '<>',
@@ -200,10 +170,7 @@ with tf.Session() as sess:
         
 
 print('done')
-
-
-
-
+    
 
 
 

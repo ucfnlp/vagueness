@@ -145,7 +145,11 @@ class ACGANModel(object):
         tvars = tf.trainable_variables()
         tvar_names = [var.name for var in tvars]
         self.assign_ops = []
-        for pair in param_names.GAN_PARAMS.VARIABLE_PAIRS:
+        if FLAGS.CELL_TYPE == 'LSTM':
+            gan_params = param_names.GAN_LSTM_PARAMS
+        else:
+            gan_params = param_names.GAN_PARAMS
+        for pair in gan_params.VARIABLE_PAIRS:
             append = False
         #     if pair[1] == param_names.GEN_GRU_GATES_WEIGHTS or pair[1] == param_names.GEN_GRU_CANDIDATE_WEIGHTS:
         #         append = True

@@ -37,7 +37,7 @@ parser.add_argument("--one_fold", help="perform only on one fold instead of five
 parser.add_argument('--name', default=default_model_name, help='Optional name of model, and affects where to save model') 
 parser.add_argument('--EPOCHS', default=50, type=int,
                             help='Num epochs.')
-parser.add_argument('--VOCAB_SIZE', default=5000, type=int,
+parser.add_argument('--VOCAB_SIZE', default=10000, type=int,
                             help='Number of words in the vocabulary.')
 parser.add_argument('--LATENT_SIZE', default=512, type=int,
                             help='Size of both the hidden state of RNN and random vector z.')
@@ -45,7 +45,7 @@ parser.add_argument('--SEQUENCE_LEN', default=50, type=int,
                             help='Max length for each sentence.')
 parser.add_argument('--EMBEDDING_SIZE', default=300, type=int,
                             help='Max length for each sentence.')
-parser.add_argument('--PATIENCE', default=400, type=int,
+parser.add_argument('--PATIENCE', default=5, type=int,
                             help='Max length for each sentence.')
 parser.add_argument('--BATCH_SIZE', default=64, type=int,
                             help='Max length for each sentence.')
@@ -53,7 +53,7 @@ parser.add_argument('--NUM_CLASSES', default=4, type=int,
                             help='Max length for each sentence.')
 parser.add_argument('--CLASS_EMBEDDING_SIZE', default=1, type=int,
                             help='Max length for each sentence.')
-parser.add_argument('--CELL_TYPE', default='GRU',
+parser.add_argument('--CELL_TYPE', default='LSTM',
                             help='Which RNN cell for the RNNs.')
 parser.add_argument('--MODE', default='TRAIN',
                             help='Whether to run in train or test mode.')
@@ -177,7 +177,7 @@ def train(model, train_x, train_y, val_x, val_y, fold_num):
     print ('training')
     with tf.Session() as sess:
         train_writer = tf.summary.FileWriter(os.path.join(summary_file, FLAGS.name), sess.graph)
-        saver = tf.train.Saver(max_to_keep=500)
+        saver = tf.train.Saver(max_to_keep=2)
         tf.global_variables_initializer().run()
         model.assign_variables(sess)
         min_test_cost = np.inf
@@ -310,7 +310,7 @@ def test(model, test_x, test_y, fold_num):
     
         
 def run_on_fold(mode, model, fold_num):
-    train_x, train_y, val_x, val_y, test_x, test_y = load.load_annotated_data(fold_num)
+    train_x, _, train_y, _, val_x, _, val_y, _, test_x, _, test_y, _ = load.load_annotated_data(fold_num)
 #     args.train = True
     if mode == 'train':
         train(model, train_x, train_y, val_x, val_y, fold_num)
