@@ -8,6 +8,7 @@ import load
 import argparse
 from sklearn import metrics
 from cnn import cnn
+from tqdm import tqdm
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--train_only", help="run in train mode only",
@@ -187,20 +188,17 @@ def train(train_x, train_y, val_x, val_y, fold_num):
         
         xaxis = 0
         step = 0
-        for cur_epoch in range(start, FLAGS.EPOCHS):
+        for cur_epoch in tqdm(range(start, FLAGS.EPOCHS), desc='Fold ' + str(fold_num) + ': Epoch'):
             disc_steps = 3
             step_ctr = 0
-            for batch_x, batch_y, cur, data_len in utils.batch_generator(train_x, train_y):
-                for j in range(1):
-                    _, batch_cost, batch_accuracy, summary = run_train_step(sess, batch_x, batch_y)
-                    train_writer.add_summary(summary, step)
-                    print('Fold', fold_num, 'Epoch: ', cur_epoch,)
-                    print('Instance ', cur, ' out of ', data_len)
-                    print('Loss: {:.4}'. format(batch_cost))
-                    print('Acc: ', batch_accuracy)
-                    print()
+            for batch_x, batch_y, _, _ in tqdm(utils.batch_generator(train_x, train_y), desc='Batch', total=len(train_y)/FLAGS.BATCH_SIZE):
+                _, batch_cost, batch_accuracy, summary = run_train_step(sess, batch_x, batch_y)
+                train_writer.add_summary(summary, step)
+                
+#                 tqdm.write('Fold', fold_num, 'Epoch: ', cur_epoch,)
+                tqdm.write('Loss: {:.4} \tAcc: {:.4}'. format(batch_cost, batch_accuracy))
             
-            print 'saving model to file:'
+            tqdm.write('saving model to file:')
             global_step.assign(cur_epoch).eval()  # set and update(eval) global_step with index, cur_epoch
             saver.save(sess, fold_ckpt_dir + "/model.ckpt", global_step=cur_epoch)
             vars = sess.run(tvars)
@@ -209,13 +207,13 @@ def train(train_x, train_y, val_x, val_y, fold_num):
             np.savez(variables_file, **variables)
             
             val_cost = validate(sess, val_x, val_y)
-            print('Val Loss: ', val_cost)
+            tqdm.write('Val Loss: ' + str(val_cost))
             if val_cost < min_val_cost:
                 min_val_cost = val_cost
             else:
                 num_mistakes += 1
             if num_mistakes >= FLAGS.PATIENCE:
-                print 'Stopping early at epoch: ', cur_epoch
+                tqdm.write('Stopping early at epoch: ' + str(cur_epoch))
                 break
             
         
@@ -233,12 +231,9 @@ def test(test_x, test_y, fold_num):
                                keep_prob: 1})
     def predict(sess, x, y):
         predictions = []
-        utils.Progress_Bar.startProgress('testing')
-        for batch_x, batch_y, cur, data_len in utils.batch_generator(x, y, batch_size=1):
+        for batch_x, batch_y, _, _ in tqdm(utils.batch_generator(x, y, batch_size=1), desc='Fold ' + str(fold_num) + ':Testing', total=len(y)):
             batch_predictions = run_test_step(sess, batch_x)
             predictions.append(batch_predictions)
-            utils.Progress_Bar.progress(float(cur) / float(data_len) * 100)
-        utils.Progress_Bar.endProgress()
         predictions = np.concatenate(predictions)
         predictions_indices = np.argmax(predictions, axis=1)
         f1_score = metrics.f1_score(y, predictions_indices, average='macro')

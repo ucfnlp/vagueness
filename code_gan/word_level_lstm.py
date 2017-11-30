@@ -11,6 +11,7 @@ import argparse
 import os
 from sklearn import metrics
 import time
+from tqdm import tqdm
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--train_only", help="run in train mode only",
@@ -23,7 +24,7 @@ parser.add_argument("--one_fold", help="perform only on one fold instead of five
                     action="store_true")
 args = parser.parse_args()
 
-prediction_words_file = 'predictions.html'
+prediction_words_file = 'word-level context-aware predictions.html'
 prediction_folder = '../predictions'
 summary_file = '/home/logan/tmp'
 ckpt_dir = '../models/word_level_lstm'
@@ -37,13 +38,13 @@ tf.app.flags.DEFINE_integer('EPOCHS', 20,
                             'Num epochs.')
 tf.app.flags.DEFINE_integer('VOCAB_SIZE', 10000,
                             'Number of words in the vocabulary.')
-tf.app.flags.DEFINE_integer('LATENT_SIZE', 512,
+tf.app.flags.DEFINE_integer('LATENT_SIZE', 256,
                             'Size of both the hidden state of RNN and random vector z.')
 tf.app.flags.DEFINE_integer('SEQUENCE_LEN', 50,
                             'Max length for each sentence.')
 tf.app.flags.DEFINE_integer('EMBEDDING_SIZE', 300,
                             'Max length for each sentence.')
-tf.app.flags.DEFINE_integer('PATIENCE', 5,
+tf.app.flags.DEFINE_integer('PATIENCE', 3,
                             'Max length for each sentence.')
 tf.app.flags.DEFINE_integer('BATCH_SIZE', 64,
                             'Max length for each sentence.')
@@ -136,7 +137,8 @@ def batch_generator(x, y, weights, batch_size):
         
 def save_predictions_to_file(x, y, weights, predict, fold_num):
     file_name = os.path.join(prediction_folder, str(fold_num), prediction_words_file)
-    out = ''
+    out = "<font color='green'>green</font>=true positive | <font color='blue'>blue</font>=false negative | "
+    out += "<font color='red'>red</font>=false positive | black=true negative.<br><br>"
     for i in range(x.shape[0]):
         line = ''
         for j in range(x.shape[1]):
@@ -208,19 +210,16 @@ def train(train_x, train_y, train_weights, val_x, val_y, val_weights, fold_num):
         print "Start from:", start
         
         step = 0
-        for cur_epoch in range(start, FLAGS.EPOCHS):
-            for batch_x, batch_y, batch_weights, cur, data_len in batch_generator(train_x, train_y, train_weights, FLAGS.BATCH_SIZE):
+        for cur_epoch in tqdm(range(start, FLAGS.EPOCHS), desc='Fold ' + str(fold_num) + ': Epoch'):
+            for batch_x, batch_y, batch_weights, _, _ in tqdm(batch_generator(train_x, train_y, train_weights, FLAGS.BATCH_SIZE), desc='Batch', total=len(train_y)/FLAGS.BATCH_SIZE):
                 _, batch_cost, batch_accuracy, summary = run_train_step(sess, batch_x, batch_y, batch_weights)
                 train_writer.add_summary(summary, step)
-                step += 1
-                print('Fold', fold_num, 'Epoch: ', cur_epoch,)
-                print('Instance ', cur, ' out of ', data_len)
-                print('Loss: {:.4}'. format(batch_cost))
-                print('Acc: ', batch_accuracy)
-                print()
+                
+#                 tqdm.write('Fold', fold_num, 'Epoch: ', cur_epoch,)
+                tqdm.write('Loss: {:.4} \tAcc: {:.4}'. format(batch_cost, batch_accuracy))
             
-            print 'saving model to file:'
-            global_step.assign(cur_epoch).eval() # set and update(eval) global_step with index, cur_epoch
+            tqdm.write('saving model to file:')
+            global_step.assign(cur_epoch).eval()  # set and update(eval) global_step with index, cur_epoch
             saver.save(sess, fold_ckpt_dir + "/model.ckpt", global_step=cur_epoch)
             vars = sess.run(tvars)
             tvar_names = [var.name for var in tf.trainable_variables()]
@@ -228,15 +227,14 @@ def train(train_x, train_y, train_weights, val_x, val_y, val_weights, fold_num):
             np.savez(variables_file, **variables)
             
             val_cost = validate(sess, val_x, val_y, val_weights)
-            print('Val Loss: ', val_cost)
+            tqdm.write('Val Loss: ' + str(val_cost))
             if val_cost < min_val_cost:
                 min_val_cost = val_cost
             else:
                 num_mistakes += 1
             if num_mistakes >= FLAGS.PATIENCE:
-                print 'Stopping early at epoch: ', cur_epoch
+                tqdm.write('Stopping early at epoch: ' + str(cur_epoch))
                 break
-        train_writer.close()
             
         
     
@@ -246,14 +244,12 @@ def test(test_x, test_y, test_weights, fold_num):
         to_return = predictions
         return sess.run(to_return,
                         feed_dict={inputs: batch_x})
+        return predictions_indices, f1_score
     def predict(sess, x, y, weights):
         total_predictions = []
-        utils.Progress_Bar.startProgress('testing')
-        for batch_x, batch_y, batch_weights, cur, data_len in batch_generator(x, y, weights, batch_size=1):
+        for batch_x, batch_y, batch_weights, cur, data_len in tqdm(batch_generator(x, y, weights, batch_size=1), desc='Fold ' + str(fold_num) + ':Testing', total=len(y)):
             batch_predictions = run_test_step(sess, batch_x)
             total_predictions.append(batch_predictions)
-            utils.Progress_Bar.progress(float(cur)/float(data_len)*100)
-        utils.Progress_Bar.endProgress()
         total_predictions = np.squeeze(np.array(total_predictions))
         f1_score = metrics.f1_score(y.flatten(), total_predictions.flatten(), average='binary', sample_weight=test_weights.flatten())
         return total_predictions, f1_score

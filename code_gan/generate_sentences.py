@@ -10,6 +10,7 @@ import utils
 import param_names
 import load
 import argparse
+from tqdm import tqdm
 
 train_variables_file = '../models/lm_ckpts/tf_lm_variables.npz'
 dataset_file = '../data/dataset.h5'
@@ -44,14 +45,16 @@ tf.app.flags.DEFINE_string('CELL_TYPE', 'LSTM',
                             'Which RNN cell for the RNNs.')
 tf.app.flags.DEFINE_boolean('SAMPLE', False,
                             'Whether to sample from the generator distribution to get fake samples.')
-tf.app.flags.DEFINE_float('HIDDEN_NOISE_STD_DEV', 0, #0.05
-                            'Standard deviation for the gaussian noise added to each time '
-                            + 'step\'s hidden state. To turn off, set = 0')
-tf.app.flags.DEFINE_float('VOCAB_NOISE_STD_DEV', 1,
+# tf.app.flags.DEFINE_float('HIDDEN_NOISE_STD_DEV', 0, #0.05
+#                             'Standard deviation for the gaussian noise added to each time '
+#                             + 'step\'s hidden state. To turn off, set = 0')
+tf.app.flags.DEFINE_float('VOCAB_NOISE_STD_DEV', 0,
                             'Standard deviation for the gaussian noise added to each time '
                             + 'step\'s output vocab distr. To turn off, set = 0')
 tf.app.flags.DEFINE_integer('RANDOM_SEED', 123,
                             'Random seed used for numpy and tensorflow (dropout, sampling)')
+tf.app.flags.DEFINE_boolean('GUMBEL', True,
+                            'Whether to use Gumbel-Softmax Relaxation')
 tf.set_random_seed(FLAGS.RANDOM_SEED)
 np.random.seed(FLAGS.RANDOM_SEED)
 
@@ -97,8 +100,9 @@ def sample_C(m):
 
 W = tf.Variable(tf.random_normal([FLAGS.LATENT_SIZE, FLAGS.VOCAB_SIZE]), name='W')    
 b = tf.Variable(tf.random_normal([FLAGS.VOCAB_SIZE]), name='b')    
-outputs, states, samples, probs = embedding_rnn_decoder(start_symbol_input,   # is this ok? I'm not sure what giving 0 inputs does (although it should be completely ignoring inputs)
-                                  z,
+initial_state = tf.contrib.rnn.LSTMStateTuple(z,z)
+outputs, states, samples, probs, logits = embedding_rnn_decoder(start_symbol_input,   # is this ok? I'm not sure what giving 0 inputs does (although it should be completely ignoring inputs)
+                                  initial_state,
                                   cell,
                                   FLAGS.VOCAB_SIZE,
                                   FLAGS.EMBEDDING_SIZE,
@@ -107,26 +111,21 @@ outputs, states, samples, probs = embedding_rnn_decoder(start_symbol_input,   # 
                                   update_embedding_for_previous=True,
                                   sample_from_distribution=FLAGS.SAMPLE,
                                   vague_weights=vague_weights,
-                                  hidden_noise_std_dev=FLAGS.HIDDEN_NOISE_STD_DEV,
-                                  vocab_noise_std_dev=FLAGS.VOCAB_NOISE_STD_DEV)
+                                  hidden_noise_std_dev=None,
+                                  vocab_noise_std_dev=FLAGS.VOCAB_NOISE_STD_DEV,
+                                  gumbel=FLAGS.GUMBEL)
 #                                   class_embedding=c_embedding)
 samples = tf.cast(tf.stack(samples, axis=1), tf.int32)
 probs = tf.stack(probs, axis=1)
-    
+logits = tf.stack(logits, axis=1)
 
-
-
-# is this right?
-output = tf.reshape(tf.stack(axis=1, values=outputs), [-1, FLAGS.LATENT_SIZE])
-# output = tf.nn.dropout(output, 0.5)
-# logits = tf.layers.dense(output, FLAGS.VOCAB_SIZE)
-logits = tf.matmul(output, W) + b
-logits = tf.reshape(logits, [-1, FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE])
+# logits = tf.matmul(output, W) + b
+# logits = tf.reshape(logits, [-1, FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE])
 tvars = tf.trainable_variables()
 tvar_names = [var.name for var in tvars]
     
 assign_ops = []
-for pair in param_names.GRU_TEST_PARAMS.VARIABLE_PAIRS:
+for pair in param_names.LSTM_TEST_PARAMS.VARIABLE_PAIRS:
     assign_ops.append(utils.assign_variable_op(params, tvars, pair[0], pair[1]))
 predictions = tf.cast(tf.argmax(logits, axis=2, name='predictions'), tf.int32)
 
@@ -139,8 +138,7 @@ def remove_trailing_words(samples):
     m=tf.sequence_mask(B, tf.shape(samples)[1], dtype=tf.int32)
     samples=tf.multiply(samples,m)
     return samples
-if not FLAGS.OUTPUT_EMBEDDING:
-    samples = remove_trailing_words(samples)
+samples = remove_trailing_words(samples)
 # accuracy = tf.reduce_mean(tf.cast(tf.equal(predictions, targets), "float"))
 
 
@@ -165,14 +163,14 @@ y = np.zeros((FLAGS.NUM_OUTPUT_SENTENCES))
 with tf.Session() as sess:
     tf.global_variables_initializer().run()
     sess.run(assign_ops)
-    utils.Progress_Bar.startProgress('generating sentences')	
-    for output_idx in range(0, FLAGS.NUM_OUTPUT_SENTENCES, FLAGS.BATCH_SIZE):
+#     utils.Progress_Bar.startProgress('generating sentences')	
+    for output_idx in tqdm(range(0, FLAGS.NUM_OUTPUT_SENTENCES, FLAGS.BATCH_SIZE), desc='batch'):
     	batch_c = sample_C(FLAGS.BATCH_SIZE)
         batch_z = sample_Z(FLAGS.BATCH_SIZE, FLAGS.LATENT_SIZE)
         batch_samples = sess.run(samples, feed_dict={c: batch_c, z: batch_z})
         x[output_idx:output_idx+FLAGS.BATCH_SIZE] = batch_samples
         y[output_idx:output_idx+FLAGS.BATCH_SIZE] = batch_c
-        utils.Progress_Bar.progress(float(output_idx)/float(FLAGS.NUM_OUTPUT_SENTENCES)*100)
+#         utils.Progress_Bar.progress(float(output_idx)/float(FLAGS.NUM_OUTPUT_SENTENCES)*100)
         
         output = ''
         for i in range(min(2,len(batch_samples))):
@@ -188,7 +186,7 @@ with tf.Session() as sess:
             output += '(' + str(int(batch_c[i])) + ')\n'
         print (output)
         
-    utils.Progress_Bar.endProgress()
+#     utils.Progress_Bar.endProgress()
 
 output = ''
 for i in range(len(x)):

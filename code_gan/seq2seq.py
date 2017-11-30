@@ -115,10 +115,7 @@ def _extract_argmax_and_embed(embedding,
       g = -tf.log(-tf.log(u))
       prev = prev + g
     probabilities = tf.nn.softmax(prev)
-    if fixed_embedding is not None:
-        prev_symbol = utils.get_closest_word_by_embedding(prev, fixed_embedding)
-    else:
-        prev_symbol = math_ops.argmax(prev, 1)
+    prev_symbol = math_ops.argmax(prev, 1)
     # Note that gradients will not propagate through the second parameter of
     # embedding_lookup.
     emb_prev = embedding_ops.embedding_lookup(embedding, prev_symbol)

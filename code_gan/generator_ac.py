@@ -29,7 +29,7 @@ def generator(z, c, initial_vague_terms, embedding_matrix, keep_prob):
         vague_weights = create_vague_weights(vague_terms, c)
         
         outputs, states, samples, probs, logits = embedding_rnn_decoder(start_symbol_input,   # is this ok? I'm not sure what giving 0 inputs does (although it should be completely ignoring inputs)
-                                  z,
+                                  tf.contrib.rnn.LSTMStateTuple(z,z),
                                   cell,
                                   FLAGS.VOCAB_SIZE,
                                   FLAGS.EMBEDDING_SIZE,
@@ -39,7 +39,7 @@ def generator(z, c, initial_vague_terms, embedding_matrix, keep_prob):
                                   sample_from_distribution=FLAGS.SAMPLE,
                                   vague_weights=vague_weights,
                                   embedding_matrix=embedding_matrix,
-                                  hidden_noise_std_dev=FLAGS.HIDDEN_NOISE_STD_DEV,
+                                  hidden_noise_std_dev=None,
                                   vocab_noise_std_dev=FLAGS.VOCAB_NOISE_STD_DEV,
                                   gumbel=FLAGS.GUMBEL)
 #                                   class_embedding=c_embedding),

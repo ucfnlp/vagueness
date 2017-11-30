@@ -12,6 +12,7 @@ import argparse
 from sklearn import metrics
 from scipy.ndimage.interpolation import shift
 import sys
+from tqdm import tqdm
 
 prediction_folder = os.path.join('..','predictions')
 prediction_words_file = os.path.join('predictions_words_acgan')
@@ -69,12 +70,9 @@ parser.add_argument('--NUM_FILTERS', default=128,  type=int,
                             help='Number of filters per filter size (default: 128)')
 parser.add_argument('--KEEP_PROB', default=1, type=float,
                             help='Dropout probability of keeping a node')
-parser.add_argument('--HIDDEN_NOISE_STD_DEV', default=0, type=float, #0.05
-                            help='Standard deviation for the gaussian noise added to each time '
-                            + 'step\'s hidden state. To turn off, set = 0')
-# parser.add_argument('--VOCAB_NOISE_STD_DEV', default=1, type=float,
+# parser.add_argument('--HIDDEN_NOISE_STD_DEV', default=0, type=float, #0.05
 #                             help='Standard deviation for the gaussian noise added to each time '
-#                             + 'step\'s output vocab distr. To turn off, set = 0')
+#                             + 'step\'s hidden state. To turn off, set = 0')
 parser.add_argument('--VOCAB_NOISE_STD_DEV', default=0, type=float,
                             help='Standard deviation for the gaussian noise added to each time '
                             + 'step\'s output vocab distr. To turn off, set = 0')
@@ -205,10 +203,10 @@ def train(model, train_x, train_y, val_x, val_y, fold_num):
         step = 0
         min_val_cost = np.inf
         num_mistakes = 0
-        for cur_epoch in range(start, FLAGS.EPOCHS):
+        for cur_epoch in tqdm(range(start, FLAGS.EPOCHS), desc='Fold ' + str(fold_num) + ': Epoch', total=FLAGS.EPOCHS-start):
             disc_steps = 3
             step_ctr = 0
-            for batch_x, batch_y, cur, data_len in utils.batch_generator(train_x, train_y, one_hot=not FLAGS.SAMPLE):
+            for batch_x, batch_y, _, _ in tqdm(utils.batch_generator(train_x, train_y, one_hot=not FLAGS.SAMPLE), desc='Batch', total=len(train_y)/FLAGS.BATCH_SIZE):
                 batch_z = sample_Z(batch_x.shape[0], FLAGS.LATENT_SIZE)
                 batch_fake_c = sample_C(batch_x.shape[0])
                 for j in range(1):
@@ -226,8 +224,8 @@ def train(model, train_x, train_y, val_x, val_y, fold_num):
                             sess, batch_x, batch_y, batch_z, g_batch_fake_c)
             
                     generated_sequences = batch_samples
-                    print('Fold', fold_num, 'Epoch: ', cur_epoch,)
-                    print('Instance ', cur, ' out of ', data_len)
+#                     print('Fold', fold_num, 'Epoch: ', cur_epoch,)
+#                     print('Instance ', cur, ' out of ', data_len)
                     print('D loss: {:.4}'. format(D_loss_curr))
                     print('G_loss: {:.4}'.format(G_loss_curr))
                     print('D real acc: ', real_acc, ' D fake acc: ', fake_acc)
