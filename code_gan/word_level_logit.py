@@ -24,7 +24,7 @@ parser.add_argument("--one_fold", help="perform only on one fold instead of five
                     action="store_true")
 args = parser.parse_args()
 
-prediction_words_file = 'predictions_logit.html'
+prediction_words_file = 'word-level context-agnostic predictions.html'
 prediction_folder = '../predictions'
 summary_file = '/home/logan/tmp'
 ckpt_dir = '../models/word_level_logit'
@@ -311,7 +311,14 @@ def train(train_x, train_y, val_x, val_y, fold_num):
             
         train_writer.close()
             
-        
+def predict_on_sentences(test_x, test_y, test_weights, id_to_vague, fold_num):
+    total_predictions = []
+    for sent in test_x:
+        sent_predictions = [id_to_vague[word] for word in sent]
+        total_predictions.append(sent_predictions)
+    total_predictions = np.array(total_predictions)
+    Metrics.print_and_save_metrics(test_y.flatten(), total_predictions.flatten(), test_weights.flatten())
+    save_predictions_to_file(test_x, test_y, test_weights, total_predictions, fold_num)
     
 def test(test_x, test_y, fold_num):
     
@@ -340,17 +347,26 @@ def test(test_x, test_y, fold_num):
             print ckpt.model_checkpoint_path
             saver.restore(sess, ckpt.model_checkpoint_path)  # restore all variables
         total_predictions, _ = predict(sess, test_x, test_y)
-        Metrics.print_and_save_metrics(test_y, total_predictions)
+        Metrics.print_metrics(test_y, total_predictions)
+    id_to_vague = {}
+    for i, id in enumerate(test_x):
+        id_to_vague[id] = total_predictions[i]
+    id_to_vague[0] = 0
+    return id_to_vague
         
         
 
 def run_on_fold(mode, fold_num):
-    train_x, train_y, _, _, val_x, val_y, _, _, test_x, test_y, _, _ = load.load_annotated_data(fold_num)
-    train_x, train_y, val_x, val_y, test_x, test_y = create_dataset(train_x, train_y, val_x, val_y, test_x, test_y)
+    train_x, train_y, _, train_weights, val_x, val_y, _, val_weights, test_x, test_y, _, test_weights = load.load_annotated_data(fold_num)
+    train_x_word, train_y_word, val_x_word, val_y_word, test_x_word, test_y_word = create_dataset(train_x, train_y, val_x, val_y, test_x, test_y)
     if mode == 'train':
-        train(train_x, train_y, val_x, val_y, fold_num)
+        train(train_x_word, train_y_word, val_x_word, val_y_word, fold_num)
     else:
-        test(test_x, test_y, fold_num)
+        x = np.concatenate([train_x_word, val_x_word, test_x_word])
+        y = np.concatenate([train_y_word, val_y_word, test_y_word])
+        id_to_vague = test(x, y, fold_num)
+        predict_on_sentences(test_x, test_y, test_weights, id_to_vague, fold_num)
+        
         
 def run_in_mode(mode, one_fold):
     if one_fold:

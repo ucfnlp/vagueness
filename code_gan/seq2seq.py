@@ -89,7 +89,7 @@ def _extract_argmax_and_embed(embedding,
                               vague_weights=None,
                               fixed_embedding=None,
                               vocab_noise_std_dev=None,
-                              gumbel=False):
+                              gumbel=None):
   """Get a loop_function that extracts the previous symbol and embeds it.
 
   Args:
@@ -102,17 +102,18 @@ def _extract_argmax_and_embed(embedding,
   Returns:
     A loop function.
   """
+  if gumbel is not None:
+      unstacked_gumbel = tf.unstack(gumbel, axis=1)
 
-  def loop_function(prev, _):
+  def loop_function(prev, i):
     if output_projection is not None:
       prev = nn_ops.xw_plus_b(prev, output_projection[0], output_projection[1])
     if vague_weights is not None:
       prev = tf.add(prev, vague_weights)
     if vocab_noise_std_dev is not None:
       prev = utils.gaussian_noise_layer(prev, std=vocab_noise_std_dev)
-    if gumbel:
-      u = tf.random_uniform(shape=tf.shape(prev), minval=0, maxval=1, dtype=tf.float32) 
-      g = -tf.log(-tf.log(u))
+    if gumbel is not None:
+      g = unstacked_gumbel[i]
       prev = prev + g
     probabilities = tf.nn.softmax(prev)
     prev_symbol = math_ops.argmax(prev, 1)
@@ -321,7 +322,7 @@ def embedding_rnn_decoder(decoder_inputs,
                           fixed_embedding=None,
                           hidden_noise_std_dev=None,
                           vocab_noise_std_dev=None,
-                          gumbel=False):
+                          gumbel=None):
   """RNN decoder with embedding and a pure-decoding option.
 
   Args:

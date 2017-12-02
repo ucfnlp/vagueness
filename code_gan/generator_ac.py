@@ -15,6 +15,8 @@ def generator(z, c, initial_vague_terms, embedding_matrix, keep_prob):
 #         cell = tf.contrib.rnn.DropoutWrapper(cell, output_keep_prob=0.5)
         dims = tf.stack([tf.shape(c)[0],])
         start_symbol_input = [tf.fill(dims, start_symbol_index) for i in range(FLAGS.SEQUENCE_LEN)]
+        initial_state = tf.contrib.rnn.LSTMStateTuple(tf.zeros([dims[0], FLAGS.LATENT_SIZE]), tf.zeros([dims[0], FLAGS.LATENT_SIZE]))
+        gumbel_noise = z if FLAGS.GUMBEL else None
         W = tf.get_variable("output_weights", shape=[FLAGS.LATENT_SIZE, FLAGS.VOCAB_SIZE],
            initializer=tf.contrib.layers.xavier_initializer())
         b = tf.get_variable("output_biases", shape=[FLAGS.VOCAB_SIZE],
@@ -29,7 +31,7 @@ def generator(z, c, initial_vague_terms, embedding_matrix, keep_prob):
         vague_weights = create_vague_weights(vague_terms, c)
         
         outputs, states, samples, probs, logits = embedding_rnn_decoder(start_symbol_input,   # is this ok? I'm not sure what giving 0 inputs does (although it should be completely ignoring inputs)
-                                  tf.contrib.rnn.LSTMStateTuple(z,z),
+                                  initial_state,
                                   cell,
                                   FLAGS.VOCAB_SIZE,
                                   FLAGS.EMBEDDING_SIZE,
@@ -41,7 +43,7 @@ def generator(z, c, initial_vague_terms, embedding_matrix, keep_prob):
                                   embedding_matrix=embedding_matrix,
                                   hidden_noise_std_dev=None,
                                   vocab_noise_std_dev=FLAGS.VOCAB_NOISE_STD_DEV,
-                                  gumbel=FLAGS.GUMBEL)
+                                  gumbel=gumbel_noise)
 #                                   class_embedding=c_embedding),
 
         samples = tf.cast(tf.stack(samples, axis=1), tf.int32)
