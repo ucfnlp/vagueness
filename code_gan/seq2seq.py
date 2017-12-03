@@ -89,7 +89,7 @@ def _extract_argmax_and_embed(embedding,
                               vague_weights=None,
                               fixed_embedding=None,
                               vocab_noise_std_dev=None,
-                              gumbel=False):
+                              gumbel=None):
   """Get a loop_function that extracts the previous symbol and embeds it.
 
   Args:
@@ -102,17 +102,19 @@ def _extract_argmax_and_embed(embedding,
   Returns:
     A loop function.
   """
+  if gumbel is not None:
+      unstacked_gumbel = tf.unstack(gumbel, axis=1)
 
-  def loop_function(prev, _):
+  def loop_function(prev, i):
     if output_projection is not None:
       prev = nn_ops.xw_plus_b(prev, output_projection[0], output_projection[1])
+    pure_prev = prev
     if vague_weights is not None:
       prev = tf.add(prev, vague_weights)
-    if vocab_noise_std_dev is not None:
-      prev = utils.gaussian_noise_layer(prev, std=vocab_noise_std_dev)
-    if gumbel:
-      u = tf.random_uniform(shape=tf.shape(prev), minval=0, maxval=1, dtype=tf.float32) 
-      g = -tf.log(-tf.log(u))
+#     if vocab_noise_std_dev is not None:
+#       prev = utils.gaussian_noise_layer(prev, std=vocab_noise_std_dev)
+    if gumbel is not None:
+      g = unstacked_gumbel[i]
       prev = prev + g
     probabilities = tf.nn.softmax(prev)
     prev_symbol = math_ops.argmax(prev, 1)
@@ -121,7 +123,7 @@ def _extract_argmax_and_embed(embedding,
     emb_prev = embedding_ops.embedding_lookup(embedding, prev_symbol)
     if not update_embedding:
       emb_prev = array_ops.stop_gradient(emb_prev)
-    return emb_prev, prev_symbol, probabilities, prev
+    return emb_prev, prev_symbol, probabilities, prev, pure_prev
 
   return loop_function
   
@@ -206,29 +208,30 @@ def rnn_decoder(decoder_inputs,
     samples = []
     probabilities = []
     logits = []
+    pure_logits = []
     prev = None
     for i, inp in enumerate(decoder_inputs):
       if loop_function is not None and prev is not None:
         with variable_scope.variable_scope("loop_function", reuse=True):
-          inp, sample, probability, logit = loop_function(prev, i)
+          inp, sample, probability, logit, pure_logit = loop_function(prev, i)
           samples.append(sample)
           probabilities.append(probability)
           logits.append(logit)
+          pure_logits.append(pure_logit)
       if i > 0:
         variable_scope.get_variable_scope().reuse_variables()
-      if class_embedding is not None:
-        inp = tf.concat([inp, class_embedding], 1)
-      if hidden_noise_std_dev is not None:
-        state = utils.gaussian_noise_layer(state, std=hidden_noise_std_dev)
+#       if hidden_noise_std_dev is not None:
+#         state = utils.gaussian_noise_layer(state, std=hidden_noise_std_dev)
       output, state = cell(inp, state)
       outputs.append(output)
       if loop_function is not None:
         prev = output
-    inp, sample, probability, logit = loop_function(prev, i)
+    inp, sample, probability, logit, pure_logit = loop_function(prev, i)
     samples.append(sample)
     probabilities.append(probability)
     logits.append(logit)
-    return outputs, state, samples, probabilities, logits
+    pure_logits.append(pure_logit)
+    return outputs, state, samples, probabilities, logits, pure_logits
 
 
 def basic_rnn_seq2seq(encoder_inputs,
@@ -321,7 +324,7 @@ def embedding_rnn_decoder(decoder_inputs,
                           fixed_embedding=None,
                           hidden_noise_std_dev=None,
                           vocab_noise_std_dev=None,
-                          gumbel=False):
+                          gumbel=None):
   """RNN decoder with embedding and a pure-decoding option.
 
   Args:

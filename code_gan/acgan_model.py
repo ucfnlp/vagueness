@@ -27,12 +27,10 @@ class ACGANModel(object):
                                self.z: z,
                                self.keep_prob: FLAGS.KEEP_PROB})
     
-    def run_G_train_step(self, sess, batch_x, batch_c, z, batch_fake_c):
-        to_return = [self.G_solver, self.G_loss, self.samples, self.probs, self.merged]
+    def run_G_train_step(self, sess, z, batch_fake_c):
+        to_return = [self.G_solver, self.G_loss, self.samples, self.probs, self.merged, self.logits, self.pure_logits, self.vague_weights]
         return sess.run(to_return,
-                    feed_dict={self.real_x: batch_x,
-                               self.real_c: batch_c,
-                               self.fake_c: batch_fake_c,
+                    feed_dict={self.fake_c: batch_fake_c,
                                self.z: z,
                                self.keep_prob: FLAGS.KEEP_PROB})
         
@@ -76,17 +74,19 @@ class ACGANModel(object):
             self.real_x = tf.placeholder(tf.float32, shape=[None, FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE])
         self.real_c = tf.placeholder(tf.int32, [None,], 'class')
         self.fake_c = tf.placeholder(tf.int32, [None,], 'class')
-        self.z = tf.placeholder(tf.float32, [None, FLAGS.LATENT_SIZE], name='z')
+        self.z = tf.placeholder(tf.float32, [None, FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE], name='z')
         
         # Initialization doesn't matter here, since the embedding matrix is
         # being replaced with the pretrained parameters
         self.embedding_matrix = tf.get_variable(shape=[FLAGS.VOCAB_SIZE, FLAGS.EMBEDDING_SIZE], 
                             initializer=tf.contrib.layers.xavier_initializer(), name='embedding_matrix')
+        self.gumbel_mu = tf.get_variable(name='gumbel_mu', initializer=tf.constant(0.))
+        self.gumbel_sigma = tf.get_variable(name='gumbel_sigma', initializer=tf.constant(1.))
         self.keep_prob = tf.placeholder(tf.float32)
         
     def _add_acgan(self):
         with tf.variable_scope(tf.get_variable_scope()) as scope:
-            self.G_sample, self.samples, self.probs, self.u, self.m = generator(self.z, self.fake_c, self.vague_terms,
+            self.G_sample, self.samples, self.probs, self.u, self.m, self.logits, self.pure_logits, self.vague_weights = generator(self.z, self.fake_c, self.vague_terms,
                  self.embedding_matrix, self.keep_prob) #TODO move to generator
             self.D_real, self.D_logit_real, self.D_class_logit_real = discriminator(self.real_x, 
                  self.embedding_matrix, self.keep_prob)

@@ -24,11 +24,13 @@ parser.add_argument("--one_fold", help="perform only on one fold instead of five
                     action="store_true")
 args = parser.parse_args()
 
-prediction_words_file = 'predictions.html'
+prediction_words_file = 'word-level context-agnostic predictions.html'
 prediction_folder = '../predictions'
 summary_file = '/home/logan/tmp'
-ckpt_dir = '../models/word_level_lstm'
+ckpt_dir = '../models/word_level_logit'
 variables_file = ckpt_dir + '/variables.npz'
+vague_phrases_file = '../data/vague_phrases.txt'
+val_ratio = 0.2
 fast = False
 num_folds = 5
 start_time = time.time()
@@ -38,13 +40,11 @@ tf.app.flags.DEFINE_integer('EPOCHS', 20,
                             'Num epochs.')
 tf.app.flags.DEFINE_integer('VOCAB_SIZE', 10000,
                             'Number of words in the vocabulary.')
-tf.app.flags.DEFINE_integer('LATENT_SIZE', 256,
-                            'Size of both the hidden state of RNN and random vector z.')
 tf.app.flags.DEFINE_integer('SEQUENCE_LEN', 50,
                             'Max length for each sentence.')
 tf.app.flags.DEFINE_integer('EMBEDDING_SIZE', 300,
                             'Max length for each sentence.')
-tf.app.flags.DEFINE_integer('PATIENCE', 3,
+tf.app.flags.DEFINE_integer('PATIENCE', 1,
                             'Max length for each sentence.')
 tf.app.flags.DEFINE_integer('BATCH_SIZE', 64,
                             'Max length for each sentence.')
@@ -55,16 +55,102 @@ tf.app.flags.DEFINE_integer('RANDOM_SEED', 123,
 tf.set_random_seed(FLAGS.RANDOM_SEED)
 np.random.seed(FLAGS.RANDOM_SEED)
 
-load data for fold
-get all unique words in (train + val)
-pick out words that are vague >= 2
-pick out equal number of words that are not vague (maybe not in the vague=1 list?)
-make train, val only based on words
-train logit
-run model on ALL words to get vague labels for each unqiue word
-assign labels to test set sentences
-metrics
+# load data for fold
+# get all unique unigrams, bigrams, and trigrams in (train + val)
+# pick out words that are vague >= 2 (in vague phrases list)
+# pick out equal number of words that are not vague
+# make train, val only based on words
+# train logit
+# run model on ALL words to get vague labels for each unqiue word
+# assign labels to test set sentences
+# metrics
 
+def get_unique_unigrams(x):
+    return np.unique(x)
+
+# def get_vague_word_ids(word_to_id):
+#     all_ids = []
+#     with open(vague_phrases_file) as f:
+#         for line in f:
+#             phrase, _ = line.split(':')
+#             words = phrase.split()
+#             in_dictionary = True
+#             ids = [word_to_id.get(word) for word in words]
+#             if None in ids:
+#                print('Phrase: ', words, 'excluded because a word was not found in dictionary' )
+#             else:
+#                 all_ids.append(ids)
+#     return all_ids
+
+def get_vague_word_ids(x, y):
+    condition = y==1
+    vague_word_ids = np.extract(condition, x)
+    vague_word_ids = np.unique(vague_word_ids)
+    return vague_word_ids
+
+def get_clear_word_ids(x, y):
+    condition = y==0
+    clear_word_ids = np.extract(condition, x)
+    clear_word_ids = np.unique(clear_word_ids)
+    return clear_word_ids
+
+def filter_vague(unique_x, vague_word_ids):
+    return np.array([x for x in unique_x if x in vague_word_ids])
+
+def filter_not_in_list(my_array, to_exclude):
+    mask = np.in1d(my_array, to_exclude)
+    return my_array[~mask]
+
+def choose_n_clear_words(x, vague_word_ids, n):
+    unique_x = get_unique_unigrams(x)
+    clear_words = np.array([x for x in unique_x if not x in vague_word_ids])
+    np.random.shuffle(clear_words)
+#     return clear_words[:n]
+    return clear_words
+
+def create_x_y(vague_words, clear_words):
+    x = np.concatenate([vague_words, clear_words])
+    y = np.concatenate([np.ones_like(vague_words), np.zeros_like(clear_words)])
+    return x, y
+    
+def shuffle(*args):
+    if len(args) == 0:
+        raise Exception('No lists to shuffle')
+    permutation = np.random.permutation(len(args[0]))
+    return [arg[permutation] for arg in args]
+
+def split_train_val(val_ratio, *args):
+    val_len = int(len(args[0]) * val_ratio)
+    val_args = [arg[:val_len] for arg in args]
+    train_args = [arg[val_len:] for arg in args]
+    return train_args + val_args
+
+def create_dataset(train_x, train_y, val_x, val_y, test_x, test_y):
+    x = np.concatenate([train_x, val_x, test_x])
+    y = np.concatenate([train_y, val_y, test_y])
+    train_val_x = np.concatenate([train_x, val_x])
+    train_val_y = np.concatenate([train_y, val_y])
+    all_words = get_unique_unigrams(x)
+    all_vague_words = get_vague_word_ids(x, y)
+#     all_vague_words = get_vague_word_ids(word_to_id)
+#     with open('../data/vague_WORDS.txt', 'w') as f:
+#         one_word_vague_words = [word[0] for word in all_vague_words if len(word) == 1]
+#         for w in one_word_vague_words:
+#             if w == 0: continue
+#             f.write(d[w] + '\n')
+    all_clear_words = filter_not_in_list(all_words, all_vague_words)
+    train_val_unique_words = get_unique_unigrams(train_val_x)
+    train_val_vague = filter_vague(train_val_unique_words, all_vague_words)
+    train_val_clear = choose_n_clear_words(train_val_unique_words, all_vague_words, len(train_val_vague))
+    new_x, new_y = create_x_y(train_val_vague, train_val_clear)
+    new_x, new_y = shuffle(new_x, new_y)
+    train_x, train_y, val_x, val_y = split_train_val(val_ratio, new_x, new_y)
+    
+    test_vague = filter_not_in_list(all_vague_words, train_val_vague)
+    test_clear = filter_not_in_list(all_clear_words, train_val_clear)
+    test_x, test_y = create_x_y(test_vague, test_clear)
+    test_x, test_y = shuffle(test_x, test_y)
+    return train_x, train_y, val_x, val_y, test_x, test_y
 
 '''
 --------------------------------
@@ -92,43 +178,23 @@ MODEL
 '''
         
 print('building model')
-inputs = tf.placeholder(tf.int32, shape=(None, FLAGS.SEQUENCE_LEN), name='inputs')
-targets = tf.placeholder(tf.int32, shape=(None, FLAGS.SEQUENCE_LEN), name='targets')
-weights = tf.placeholder(tf.float32, shape=(None, FLAGS.SEQUENCE_LEN), name='weights')
+inputs = tf.placeholder(tf.int32, shape=(None,), name='inputs')
+targets = tf.placeholder(tf.float32, shape=(None,), name='targets')
 embedding_tensor = tf.Variable(initial_value=embedding_weights, name='embedding_matrix')
 embeddings = tf.nn.embedding_lookup(embedding_tensor, inputs)
-with tf.variable_scope('fw'):
-    cell_fw = utils.create_cell(1.)
-with tf.variable_scope('bw'):
-    cell_bw = utils.create_cell(1.)
-embeddings_time_steps = tf.unstack(embeddings, axis=1)
-outputs, state_fw, state_bw = tf.contrib.rnn.static_bidirectional_rnn(
-            cell_fw, cell_bw, embeddings_time_steps, dtype=tf.float32)
-
-# is this right?
-output = tf.reshape(tf.stack(axis=1, values=outputs), [-1, FLAGS.LATENT_SIZE*2])
-# output = tf.nn.dropout(output, 0.5)
-
-logits = tf.layers.dense(output, 2)
-logits = tf.reshape(logits, [-1, FLAGS.SEQUENCE_LEN, 2])
-loss = tf.contrib.seq2seq.sequence_loss(
-        logits,
-        targets,
-        weights,
-        average_across_timesteps=True,
-        average_across_batch=True
-    )
-# cost = tf.reduce_sum(loss)
-cost = loss
+# hidden = tf.layers.dense(embeddings, 100)
+# logits = tf.layers.dense(hidden, 1)
+logits = tf.layers.dense(embeddings, 1)
+logits = tf.squeeze(logits)
+loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=targets, logits=logits)
+cost = tf.reduce_sum(loss)
 tvars = tf.trainable_variables()
 tvar_names = [var.name for var in tvars]
 # TODO: change to rms optimizer
 optimizer = tf.train.AdamOptimizer().minimize(cost, var_list=tvars)
-predictions = tf.cast(tf.argmax(logits, axis=2, name='predictions'), tf.int32)
-total = tf.reduce_sum(weights)
-# accuracy = tf.reduce_mean(tf.cast(tf.equal(predictions, targets), "float"))
-correct_predictions = tf.logical_and(tf.equal(predictions, targets), tf.cast(weights, tf.bool))
-accuracy = tf.reduce_sum(tf.cast(correct_predictions, "float"))/total
+predictions = tf.round(tf.sigmoid(logits))
+correct_predictions = tf.equal(predictions, targets)
+accuracy = tf.reduce_mean(tf.cast(correct_predictions, "float"))
 
 
 global_step = tf.Variable(-1, name='global_step', trainable=False)
@@ -138,13 +204,12 @@ utils.variable_summaries(tvars)
 merged = tf.summary.merge_all()
 
 
-def batch_generator(x, y, weights, batch_size):
+def batch_generator(x, y, batch_size):
     data_len = x.shape[0]
     for i in range(0, data_len, batch_size):
         batch_x = x[i:min(i+batch_size,data_len)]
         batch_y = y[i:min(i+batch_size,data_len)]
-        batch_weights = weights[i:min(i+batch_size,data_len)]
-        yield batch_x, batch_y, batch_weights, i, data_len
+        yield batch_x, batch_y
         
 def save_predictions_to_file(x, y, weights, predict, fold_num):
     file_name = os.path.join(prediction_folder, str(fold_num), prediction_words_file)
@@ -173,31 +238,29 @@ def save_predictions_to_file(x, y, weights, predict, fold_num):
         out += line
     with open(file_name, 'w') as f:
         f.write(out)
+        
 
-            
-def validate(sess, val_x, val_y, val_weights):
-    def run_val_step(sess, batch_x, batch_y, batch_weights):
+def validate(sess, val_x, val_y):
+    def run_val_step(sess, batch_x, batch_y):
         to_return = cost
         return sess.run(to_return,
                     feed_dict={inputs: batch_x,
-                               targets: batch_y,
-                               weights: batch_weights})
+                               targets: batch_y})
     sum_cost = 0
-    for batch_x, batch_y, batch_weights, cur, data_len in batch_generator(val_x, val_y, val_weights, FLAGS.BATCH_SIZE):
-        batch_cost = run_val_step(sess, batch_x, batch_y, batch_weights)
-        sum_cost += batch_cost * len(batch_y)       # Add up cost based on how many instances in batch
+    for batch_x, batch_y, cur, data_len in utils.batch_generator(val_x, val_y):
+        batch_cost = run_val_step(sess, batch_x, batch_y)
+        sum_cost += batch_cost * len(batch_y)  # Add up cost based on how many instances in batch
     val_cost = sum_cost / len(val_y)
     return val_cost
     
     
-def train(train_x, train_y, train_weights, val_x, val_y, val_weights, fold_num):
+def train(train_x, train_y, val_x, val_y, fold_num):
     
-    def run_train_step(sess, batch_x, batch_y, batch_weights):
+    def run_train_step(sess, batch_x, batch_y):
         to_return = [optimizer, cost, accuracy, merged]
         return sess.run(to_return,
                     feed_dict={inputs: batch_x,
-                               targets: batch_y,
-                               weights: batch_weights})
+                               targets: batch_y})
         
     
     print 'training'
@@ -209,22 +272,22 @@ def train(train_x, train_y, train_weights, val_x, val_y, val_weights, fold_num):
         num_mistakes = 0
         
         fold_ckpt_dir = ckpt_dir + '/' + str(fold_num)
-        variables_file = fold_ckpt_dir + '/variables_'
+        variables_file = fold_ckpt_dir + '/tf_acgan_variables_'
         if args.resume:
             ckpt = tf.train.get_checkpoint_state(fold_ckpt_dir)
             if ckpt and ckpt.model_checkpoint_path:
                 print ckpt.model_checkpoint_path
-                model.saver.restore(sess, ckpt.model_checkpoint_path) # restore all variables
+                model.saver.restore(sess, ckpt.model_checkpoint_path)  # restore all variables
     
-        start = global_step.eval() + 1 # get last global_step and start the next one
+        start = global_step.eval() + 1  # get last global_step and start the next one
         print "Start from:", start
         
         step = 0
         for cur_epoch in tqdm(range(start, FLAGS.EPOCHS), desc='Fold ' + str(fold_num) + ': Epoch'):
-            for batch_x, batch_y, batch_weights, _, _ in tqdm(batch_generator(train_x, train_y, train_weights, FLAGS.BATCH_SIZE), desc='Batch', total=len(train_y)/FLAGS.BATCH_SIZE):
-                _, batch_cost, batch_accuracy, summary = run_train_step(sess, batch_x, batch_y, batch_weights)
+            for batch_x, batch_y, _, _ in tqdm(utils.batch_generator(train_x, train_y), desc='Batch', total=len(train_y)/FLAGS.BATCH_SIZE):
+                _, batch_cost, batch_accuracy, summary = run_train_step(sess, batch_x, batch_y)
                 train_writer.add_summary(summary, step)
-                
+                step += 1
 #                 tqdm.write('Fold', fold_num, 'Epoch: ', cur_epoch,)
                 tqdm.write('Loss: {:.4} \tAcc: {:.4}'. format(batch_cost, batch_accuracy))
             
@@ -236,7 +299,7 @@ def train(train_x, train_y, train_weights, val_x, val_y, val_weights, fold_num):
             variables = dict(zip(tvar_names, vars))
             np.savez(variables_file, **variables)
             
-            val_cost = validate(sess, val_x, val_y, val_weights)
+            val_cost = validate(sess, val_x, val_y)
             tqdm.write('Val Loss: ' + str(val_cost))
             if val_cost < min_val_cost:
                 min_val_cost = val_cost
@@ -246,26 +309,35 @@ def train(train_x, train_y, train_weights, val_x, val_y, val_weights, fold_num):
                 tqdm.write('Stopping early at epoch: ' + str(cur_epoch))
                 break
             
-        
+        train_writer.close()
+            
+def predict_on_sentences(test_x, test_y, test_weights, id_to_vague, fold_num):
+    total_predictions = []
+    for sent in test_x:
+        sent_predictions = [id_to_vague[word] for word in sent]
+        total_predictions.append(sent_predictions)
+    total_predictions = np.array(total_predictions)
+    Metrics.print_and_save_metrics(test_y.flatten(), total_predictions.flatten(), test_weights.flatten())
+    save_predictions_to_file(test_x, test_y, test_weights, total_predictions, fold_num)
     
-def test(test_x, test_y, test_weights, fold_num):
+def test(test_x, test_y, fold_num):
     
     def run_test_step(sess, batch_x):
         to_return = predictions
         return sess.run(to_return,
                         feed_dict={inputs: batch_x})
-        return predictions_indices, f1_score
-    def predict(sess, x, y, weights):
+    def predict(sess, x, y):
         total_predictions = []
-        for batch_x, batch_y, batch_weights, cur, data_len in tqdm(batch_generator(x, y, weights, batch_size=1), desc='Fold ' + str(fold_num) + ':Testing', total=len(y)):
+        for batch_x, batch_y, _, _ in tqdm(utils.batch_generator(x, y, batch_size=1), desc='Fold ' + str(fold_num) + ':Testing', total=len(y)):
             batch_predictions = run_test_step(sess, batch_x)
             total_predictions.append(batch_predictions)
-        total_predictions = np.squeeze(np.array(total_predictions))
-        f1_score = metrics.f1_score(y.flatten(), total_predictions.flatten(), average='binary', sample_weight=test_weights.flatten())
+        total_predictions = np.array(total_predictions)
+        f1_score = metrics.f1_score(y, total_predictions, average='macro')
         return total_predictions, f1_score
     
     print 'testing'
     with tf.Session() as sess:
+        saver = tf.train.Saver(max_to_keep=5)
         tf.global_variables_initializer().run()
         fold_ckpt_dir = ckpt_dir + '/' + str(fold_num)
         ckpt = tf.train.get_checkpoint_state(fold_ckpt_dir)
@@ -273,21 +345,28 @@ def test(test_x, test_y, test_weights, fold_num):
             raise Exception('Could not find saved model in: ' + fold_ckpt_dir)
         if ckpt and ckpt.model_checkpoint_path:
             print ckpt.model_checkpoint_path
-            saver.restore(sess, ckpt.model_checkpoint_path) # restore all variables
-        total_predictions, _ = predict(sess, test_x, test_y, test_weights)
-        Metrics.print_and_save_metrics(test_y.flatten(), total_predictions.flatten())
-        save_predictions_to_file(test_x, test_y, test_weights, total_predictions, fold_num)
-        
+            saver.restore(sess, ckpt.model_checkpoint_path)  # restore all variables
+        total_predictions, _ = predict(sess, test_x, test_y)
+        Metrics.print_metrics(test_y, total_predictions)
+    id_to_vague = {}
+    for i, id in enumerate(test_x):
+        id_to_vague[id] = total_predictions[i]
+    id_to_vague[0] = 0
+    return id_to_vague
         
         
 
 def run_on_fold(mode, fold_num):
     train_x, train_y, _, train_weights, val_x, val_y, _, val_weights, test_x, test_y, _, test_weights = load.load_annotated_data(fold_num)
-#     args.train = True
+    train_x_word, train_y_word, val_x_word, val_y_word, test_x_word, test_y_word = create_dataset(train_x, train_y, val_x, val_y, test_x, test_y)
     if mode == 'train':
-        train(train_x, train_y, train_weights, val_x, val_y, val_weights, fold_num)
+        train(train_x_word, train_y_word, val_x_word, val_y_word, fold_num)
     else:
-        test(test_x, test_y, test_weights, fold_num)
+        x = np.concatenate([train_x_word, val_x_word, test_x_word])
+        y = np.concatenate([train_y_word, val_y_word, test_y_word])
+        id_to_vague = test(x, y, fold_num)
+        predict_on_sentences(test_x, test_y, test_weights, id_to_vague, fold_num)
+        
         
 def run_in_mode(mode, one_fold):
     if one_fold:
