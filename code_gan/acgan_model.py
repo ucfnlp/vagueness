@@ -27,10 +27,12 @@ class ACGANModel(object):
                                self.z: z,
                                self.keep_prob: FLAGS.KEEP_PROB})
     
-    def run_G_train_step(self, sess, z, batch_fake_c):
+    def run_G_train_step(self, sess, batch_x, batch_c, z, batch_fake_c):
         to_return = [self.G_solver, self.G_loss, self.samples, self.probs, self.merged]
         return sess.run(to_return,
-                    feed_dict={self.fake_c: batch_fake_c,
+                    feed_dict={self.real_x: batch_x,
+                               self.real_c: batch_c,
+                               self.fake_c: batch_fake_c,
                                self.z: z,
                                self.keep_prob: FLAGS.KEEP_PROB})
         
@@ -74,7 +76,7 @@ class ACGANModel(object):
             self.real_x = tf.placeholder(tf.float32, shape=[None, FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE])
         self.real_c = tf.placeholder(tf.int32, [None,], 'class')
         self.fake_c = tf.placeholder(tf.int32, [None,], 'class')
-        self.z = tf.placeholder(tf.float32, [None, FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE], name='z')
+        self.z = tf.placeholder(tf.float32, [None, FLAGS.LATENT_SIZE], name='z')
         
         # Initialization doesn't matter here, since the embedding matrix is
         # being replaced with the pretrained parameters

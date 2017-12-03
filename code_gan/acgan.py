@@ -153,8 +153,8 @@ def save_samples_to_file(generated_sequences, batch_fake_c, fold_num, epoch):
                     f.write(word + ' ')
             f.write('(' + str(batch_fake_c[i]) + ')\n\n')
             
-def sample_Z(size):
-    return np.random.gumbel(size=size)
+def sample_Z(m, n):
+    return np.zeros((m, n))
 #     return np.random.normal(size=[m, n], scale=FLAGS.NOISE_STD_DEV)
 
 def sample_C(m):
@@ -194,7 +194,7 @@ def train(model, train_x, train_y, val_x, val_y, fold_num):
         
         batch_x, batch_y, _, _ = utils.batch_generator(train_x, train_y, one_hot=not FLAGS.SAMPLE).next()
         batch_fake_c = np.zeros([FLAGS.BATCH_SIZE], dtype=np.int32)
-        batch_z = sample_Z([FLAGS.BATCH_SIZE, FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE])
+        batch_z = sample_Z(FLAGS.BATCH_SIZE, FLAGS.LATENT_SIZE)
         batch_samples = model.run_samples(sess, batch_fake_c, batch_z)
         summary = model.run_summary(sess)
         train_writer.add_summary(summary, -1)
@@ -204,10 +204,10 @@ def train(model, train_x, train_y, val_x, val_y, fold_num):
         min_val_cost = np.inf
         num_mistakes = 0
         for cur_epoch in tqdm(range(start, FLAGS.EPOCHS), desc='Fold ' + str(fold_num) + ': Epoch', total=FLAGS.EPOCHS-start):
-            disc_steps = 1
+            disc_steps = 3
             step_ctr = 0
             for batch_x, batch_y, _, _ in tqdm(utils.batch_generator(train_x, train_y, one_hot=not FLAGS.SAMPLE), desc='Batch', total=len(train_y)/FLAGS.BATCH_SIZE):
-                batch_z = sample_Z([batch_x.shape[0], FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE])
+                batch_z = sample_Z(batch_x.shape[0], FLAGS.LATENT_SIZE)
                 batch_fake_c = sample_C(batch_x.shape[0])
                 for j in range(1):
                     _, D_loss_curr, real_acc, fake_acc, real_class_acc, fake_class_acc, real_loss, fake_loss, real_class_loss, fake_class_loss = model.run_D_train_step(
@@ -218,33 +218,29 @@ def train(model, train_x, train_y, val_x, val_y, fold_num):
                 if step_ctr == disc_steps:
                     step_ctr = 0
                     for j in range(1):
-                        batch_z = sample_Z([batch_x.shape[0], FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE])
+                        batch_z = sample_Z(batch_x.shape[0], FLAGS.LATENT_SIZE)
                         g_batch_fake_c = sample_C(batch_x.shape[0])
                         _, G_loss_curr, batch_samples, batch_probs, summary = model.run_G_train_step(
-                            sess, batch_z, g_batch_fake_c)
+                            sess, batch_x, batch_y, batch_z, g_batch_fake_c)
             
                     generated_sequences = batch_samples
 #                     print('Fold', fold_num, 'Epoch: ', cur_epoch,)
 #                     print('Instance ', cur, ' out of ', data_len)
-                    out = ''
-                    out += 'D loss: {:.4}\t'. format(D_loss_curr)
-                    out += 'G_loss: {:.4}\t'.format(G_loss_curr)
-                    out += 'Real S acc: {:.4}\t'.format(real_acc) 
-                    out += ' Fake S acc: {:.4}\t'.format(fake_acc)
-                    out += 'Real C acc: {:.4}\t'.format(real_class_acc)
-                    out += ' Fake C acc: {:.4}\n'.format(fake_class_acc)
-                    tqdm.write(out)
-#                     out += 'Samples', generated_sequences)
-                    out = ''
+                    print('D loss: {:.4}'. format(D_loss_curr))
+                    print('G_loss: {:.4}'.format(G_loss_curr))
+                    print('D real acc: ', real_acc, ' D fake acc: ', fake_acc)
+                    print('D real class acc: ', real_class_acc, ' D fake class acc: ', fake_class_acc)
+                    print('Samples', generated_sequences)
+                    print()
                     for i in range(min(6, len(generated_sequences))):
                         for j in range(len(generated_sequences[i])):
                             if generated_sequences[i][j] == 0:
-                                out += '<UNK> '
+                                print ('<UNK> ',end='')
                             else:
                                 word = d[generated_sequences[i][j]]
-                                out += word + ' '
-                        out += '(' + str(g_batch_fake_c[i]) + ')\n\n'
-                    tqdm.write(out)
+                                print (word + ' ',end='')
+                        print ('(' + str(g_batch_fake_c[i]) + ')\n')
+                     
             train_writer.add_summary(summary, step)
             step += 1
             if cur_epoch % 1 == 0:
@@ -297,10 +293,14 @@ def test(model, test_x, test_y, fold_num):
             print (ckpt_model_path)
             saver.restore(sess, ckpt_model_path) # restore all variables
         predictions = []
-        for batch_x, batch_y, _, _ in tqdm(utils.batch_generator(test_x, test_y, batch_size=1, one_hot=not FLAGS.SAMPLE), desc='Fold ' + str(fold_num) + ':Testing', total=len(test_y)):
+        utils.Progress_Bar.startProgress('testing')
+        for batch_x, batch_y, cur, data_len in utils.batch_generator(test_x, test_y, batch_size=1, one_hot=not FLAGS.SAMPLE):
 #         for batch_x, batch_y, cur, data_len in batch_generator(test_x, test_y):
             batch_predictions = model.run_test(sess, batch_x)
             predictions.append(batch_predictions)
+#             print('Instance ', cur, ' out of ', data_len)
+            utils.Progress_Bar.progress(float(cur)/float(data_len)*100)
+        utils.Progress_Bar.endProgress()
         predictions = np.concatenate(predictions)
         predictions_indices = np.argmax(predictions, axis=1)
         Metrics.print_and_save_metrics(test_y, predictions_indices)

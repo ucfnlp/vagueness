@@ -20,8 +20,6 @@ TEST_GRU_CANDIDATE_WEIGHTS = 'embedding_rnn_decoder/rnn_decoder/gru_cell/candida
 TEST_GRU_CANDIDATE_BIASES = 'embedding_rnn_decoder/rnn_decoder/gru_cell/candidate/bias:0'
 TEST_LSTM_WEIGHTS = 'embedding_rnn_decoder/rnn_decoder/basic_lstm_cell/kernel:0'
 TEST_LSTM_BIASES = 'embedding_rnn_decoder/rnn_decoder/basic_lstm_cell/bias:0'
-ALTERNATIVE_TEST_LSTM_WEIGHTS = 'embedding_rnn_decoder/rnn_decoder/basic_lstm_cell/weights:0'
-ALTERNATIVE_TEST_LSTM_BIASES = 'embedding_rnn_decoder/rnn_decoder/basic_lstm_cell/biases:0'
 TEST_OUTPUT_WEIGHTS = 'W:0'
 TEST_OUTPUT_BIASES = 'b:0'
 
@@ -53,8 +51,6 @@ GEN_GRU_CANDIDATE_WEIGHTS = 'G_/' + TEST_GRU_CANDIDATE_WEIGHTS
 GEN_GRU_CANDIDATE_BIASES = 'G_/' + TEST_GRU_CANDIDATE_BIASES
 GEN_LSTM_WEIGHTS = 'G_/' + TEST_LSTM_WEIGHTS
 GEN_LSTM_BIASES = 'G_/' + TEST_LSTM_BIASES
-ALTERNATIVE_GEN_LSTM_WEIGHTS = 'G_/' + ALTERNATIVE_TEST_LSTM_WEIGHTS
-ALTERNATIVE_GEN_LSTM_BIASES = 'G_/' + ALTERNATIVE_TEST_LSTM_BIASES
 GEN_OUTPUT_WEIGHTS = 'G_/' + 'output_weights:0'
 GEN_OUTPUT_BIASES = 'G_/' + 'output_biases:0'
 

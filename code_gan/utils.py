@@ -6,7 +6,6 @@ from tensorflow.contrib.rnn import BasicRNNCell, BasicLSTMCell, GRUCell
 import sys
 from sklearn import metrics
 import os
-import param_names
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -28,10 +27,6 @@ def gaussian_noise_layer(input_layer, std=1.0):
 def get_variable_by_name(tvars, name):
     list = [v for v in tvars if v.name == name]
     if len(list) <= 0:
-        if name == param_names.GEN_LSTM_WEIGHTS:
-            return get_variable_by_name(tvars, param_names.ALTERNATIVE_GEN_LSTM_WEIGHTS)
-        if name == param_names.GEN_LSTM_BIASES:
-            return get_variable_by_name(tvars, param_names.ALTERNATIVE_GEN_LSTM_BIASES)
         raise Exception('No variable found by name: ' + name)
     if len(list) > 1:
         raise Exception('Multiple variables found by name: ' + name)
@@ -69,27 +64,23 @@ class Metrics:
         self.metrics_collections = []
         self.averaging_method = 'binary' if is_binary else 'weighted'
         
-    def print_and_save_metrics(self, y_true, y_pred, weights=None):
-        self.print_metrics(y_true, y_pred, weights)
-        self.save_metrics_for_fold(y_true, y_pred, weights)
+    def print_and_save_metrics(self, y_true, y_pred):
+        self.print_metrics(y_true, y_pred)
+        self.save_metrics_for_fold(y_true, y_pred)
         
-    def save_metrics_for_fold(self, y_true, y_pred, weights=None):
-        if weights is None:
-            weights = np.ones_like(y_true)
-        self.metrics_collections.append( [metrics.accuracy_score(y_true, y_pred, sample_weight=weights),
-                metrics.precision_score(y_true, y_pred, average=self.averaging_method, sample_weight=weights),
-                metrics.recall_score(y_true, y_pred, average=self.averaging_method, sample_weight=weights),
-                metrics.f1_score(y_true, y_pred, average=self.averaging_method, sample_weight=weights)] )
+    def save_metrics_for_fold(self, y_true, y_pred):
+        self.metrics_collections.append( [metrics.accuracy_score(y_true, y_pred),
+                metrics.precision_score(y_true, y_pred, average=self.averaging_method),
+                metrics.recall_score(y_true, y_pred, average=self.averaging_method),
+                metrics.f1_score(y_true, y_pred, average=self.averaging_method)] )
         
-    def print_metrics(self, y_true, y_pred, weights=None):
+    def print_metrics(self, y_true, y_pred):
         print ('Performance Metrics\n-------------------\n')
-        if weights is None:
-            weights = np.ones_like(y_true)
-        print ('Accuracy', metrics.accuracy_score(y_true, y_pred, sample_weight=weights))
+        print ('Accuracy', metrics.accuracy_score(y_true, y_pred))
         print ('')
-        report = metrics.classification_report(y_true,y_pred, sample_weight=weights)
+        report = metrics.classification_report(y_true,y_pred)
         print (report + '\n')
-        confusion_matrix = metrics.confusion_matrix(y_true, y_pred, sample_weight=weights)
+        confusion_matrix = metrics.confusion_matrix(y_true, y_pred)
         print ('Confusion Matrix\n-------------------\n')
         print ('\t\t',end='')
         for i in range(len(confusion_matrix)):

@@ -265,7 +265,7 @@ def test(test_x, test_y, test_weights, fold_num):
             print ckpt.model_checkpoint_path
             saver.restore(sess, ckpt.model_checkpoint_path) # restore all variables
         total_predictions, _ = predict(sess, test_x, test_y, test_weights)
-        Metrics.print_and_save_metrics(test_y.flatten(), total_predictions.flatten(), weights=test_weights.flatten())
+        Metrics.print_and_save_metrics(test_y.flatten(), total_predictions.flatten())
         save_predictions_to_file(test_x, test_y, test_weights, total_predictions, fold_num)
         
         

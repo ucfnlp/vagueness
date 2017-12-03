@@ -59,43 +59,21 @@ labels: list of integers (0 or 1), one element for each word in the sentence
     1 = vague word
 count: number of vague terms in sentence
 '''
-
-def addLists(list1, list2):
-    if len(list1) != len(list2):
-        raise Exception('Lists are not equal length')
-    return [sum(x) for x in zip(list1, list2)]
-
-def markOccurencesOfPhrase(sentence, phrase, count):
-    phrase_counts = [0] * len(sentence)
-    for i in range(len(sentence)):
-        if i + len(phrase) >= len(sentence): break
-        if sentence[i:i+len(phrase)] ==  phrase:
-            for j in range(i, i+len(phrase)):
-                phrase_counts[j] += count
-    return phrase_counts
-
-def didFindPhrase(phrase_counts):
-    return sum(phrase_counts) > 0
-
-def markOccurencesForEachWord(sentence, phrase, count):
-    phrase_counts = [0] * len(sentence)
-    for word in phrase:
-        word_counts = markOccurencesOfPhrase(sentence, [word], count)
-        phrase_counts = addLists(phrase_counts, word_counts)
-    return phrase_counts
-        
 def labelVagueWords(sentence, vague_phrases):
-    selected = [0] * len(sentence)
+    num_vague_terms = 0
+    labels = [0] * len(sentence)
     for phrase, count in vague_phrases.iteritems():
-        phrase = phrase.lower().strip().split()
-        phrase_counts = markOccurencesOfPhrase(sentence, phrase, count)
-        if not didFindPhrase(phrase_counts):
-            phrase_counts = markOccurencesForEachWord(sentence, phrase, count)
-        selected = addLists(selected, phrase_counts)
-    labels = [1 if sel >= vague_phrase_threshold else 0 for sel in selected]
+        if count >= vague_phrase_threshold:
+            phrase = phrase.lower().strip().split()
+            word_idx = 0
+            for i in range(len(sentence)):
+                if i + len(phrase) >= len(sentence): break
+                if sentence[i:i+len(phrase)] ==  phrase:
+                    labels[i:i+len(phrase)] = [1] * len(phrase)
+                    num_vague_terms += 1
     if len(labels) != len(sentence):
         raise ValueError('len labels does not equal len sentence')
-    return labels
+    return labels, num_vague_terms
 
 # read in existing dictionary created by preprocess_unannotated.py
 print('loading dictionary')
@@ -138,7 +116,7 @@ for doc in data['docs']:
         Y_sentence.append(numpy.nan_to_num(numpy.average(scores)))
         
         # Get word-level vagueness
-        word_labels = labelVagueWords(words, sent['vague_phrases'])
+        word_labels, num_vague_terms = labelVagueWords(words, sent['vague_phrases'])
         Y_word.append(word_labels)
         
         # Store the document ID
@@ -146,10 +124,10 @@ for doc in data['docs']:
         
         # Calculate statistics
         total_terms += len(word_labels)
-        num_vague_words = sum(word_labels)
-        total_vague_terms += num_vague_words
-        num_vague_terms_list.append(num_vague_words)
-        if num_vague_words > 0: 
+#         num_vague_words = sum(x == 1 for x in word_labels)
+        total_vague_terms += num_vague_terms
+        num_vague_terms_list.append(num_vague_terms)
+        if num_vague_terms > 0: 
             total_vague_sents += 1
         std = numpy.std(scores)
         stds.append(std)
@@ -171,16 +149,16 @@ print('average standard deviation of scores for each sentence: %f' % (numpy.aver
 # plt.ylabel("Number of Sentences")
 # plt.show()
 
-hist1, bins1 = np.histogram(Y_sentence, 8, (1,5))
-hist2, bins2 = np.histogram(Y_sentence, 4, (1,5))
-print('Histogram', [round(x, 3) for x in hist1/sum(hist1.astype(float))], bins1)
-print('Histogram2', [round(x, 3) for x in hist2/sum(hist2.astype(float))], bins2)
+hist = np.histogram(Y_sentence, 8, (1,5))
+hist2 = np.histogram(Y_sentence, 4, (1,5))
+print('Histogram', hist)
+print('Histogram2', hist2)
 
 bins = [0,1,2,3,4,5,6,100000]
 num_vague_terms_histogram, _ = np.histogram(num_vague_terms_list, bins=bins)
 num_vague_terms_probs = [1.*val/sum(num_vague_terms_histogram) for val in num_vague_terms_histogram]
 print('Number of sentences with numbers of vague terms. ' + 
-      'Last bin is all sentences with greater than 5 vague terms.', [round(x, 3) for x in num_vague_terms_probs], bins)
+      'Last bin is all sentences with greater than 5 vague terms.', num_vague_terms_probs, bins)
 # convert from float to category (possible categories: {0,1,2,3})
 for idx, item in enumerate(Y_sentence):
     res = math.floor(item)
