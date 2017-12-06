@@ -76,17 +76,23 @@ parser.add_argument('--KEEP_PROB', default=1, type=float,
 parser.add_argument('--VOCAB_NOISE_STD_DEV', default=0, type=float,
                             help='Standard deviation for the gaussian noise added to each time '
                             + 'step\'s output vocab distr. To turn off, set = 0')
-parser.add_argument('--SOURCE_LOSS_WEIGHT', default=0, type=float,
+parser.add_argument('--SOURCE_LOSS_WEIGHT', default=1, type=float,
                             help='How much importance that fake/real contributes to the total loss.')
 parser.add_argument('--REAL_CLASS_LOSS_WEIGHT', default=1, type=float,
                             help='How much importance that real instances\' class loss contributes to the total loss.')
 parser.add_argument('--FAKE_CLASS_LOSS_WEIGHT', default=1, type=float,
                             help='How much importance that real instances\' class loss contributes to the total loss.')
+parser.add_argument('--USE_VAGUE_VECTOR', default=True, type=bool,
+                            help='Use regular GAN without class. Ignores class loss and vague terms vector.')
+parser.add_argument('--VANILLA_GAN', default=False, type=bool,
+                            help='Use regular GAN without class. Ignores class loss and vague terms vector.')
 parser.add_argument('--SHARE_EMBEDDING', default=True, type=bool,
                             help='Whether the discriminator and generator should share their embedding parameters')
+parser.add_argument('--TRAIN_EMBEDDING', default=False, type=bool,
+                            help='Whether the embedding parameters should be trained')
 parser.add_argument('--TRAIN_GENERATOR', default=True, type=bool,
                             help='Whether to train the generator\'s parameters')
-parser.add_argument('--L2_LAMBDA', default=0.0001, type=float,
+parser.add_argument('--L2_LAMBDA', default=0, type=float,
                             help='L2 regularization lambda parameter')
 parser.add_argument('--CHECKPOINT', default=-1, type=int,
                             help='Which checkpoint model to load when running on test set. -1 means the last model.')
@@ -95,6 +101,12 @@ parser.add_argument('--GUMBEL', default=True, type=bool,
 parser.add_argument('--TAU', default=0.5, type=float,
                             help='Tau parameter used for gumbel softmax relaxation technique. Used only if GUMBEL=True.')
 args = parser.parse_args()
+
+if args.VANILLA_GAN:
+    args.SOURCE_LOSS_WEIGHT = 1.
+    args.REAL_CLASS_LOSS_WEIGHT = 0.
+    args.FAKE_CLASS_LOSS_WEIGHT = 0.
+    args.USE_VAGUE_VECTOR = False
 
 for arg_name, arg_value in vars(args).iteritems():
     if type(arg_value) == bool:
@@ -111,7 +123,9 @@ np.random.seed(FLAGS.RANDOM_SEED)
 ''' Store model using sampling in a different location ''' 
 if FLAGS.SAMPLE:
     default_model_name = 'acgan_sample'
-    
+print('sw ', FLAGS.SOURCE_LOSS_WEIGHT, 'rcw', FLAGS.REAL_CLASS_LOSS_WEIGHT, 
+      'fcw', FLAGS.FAKE_CLASS_LOSS_WEIGHT, 'uvv', FLAGS.USE_VAGUE_VECTOR)
+
 
 '''
 --------------------------------
@@ -147,7 +161,7 @@ def save_samples_to_file(generated_sequences, batch_fake_c, fold_num, epoch):
         for i in range(len(generated_sequences)):
             for j in range(len(generated_sequences[i])):
                 if generated_sequences[i][j] == 0:
-                    f.write('<UNK> ')
+                    f.write('_ ')
                 else:
                     word = d[generated_sequences[i][j]]
                     f.write(word + ' ')
@@ -162,7 +176,7 @@ def sample_C(m):
 
 def validate(sess, model, val_x, val_y):
     sum_cost = 0
-    for batch_x, batch_y, cur, data_len in utils.batch_generator(val_x, val_y, one_hot=not FLAGS.SAMPLE):
+    for batch_x, batch_y, cur, data_len in utils.batch_generator(val_x, val_y, one_hot=not FLAGS.SAMPLE, actually_zero=True):
         batch_cost = model.run_val(sess, batch_x, batch_y)
         sum_cost += batch_cost * len(batch_y)  # Add up cost based on how many instances in batch
     val_cost = sum_cost / len(val_y)
@@ -192,7 +206,7 @@ def train(model, train_x, train_y, val_x, val_y, fold_num):
         start = model.get_global_step() + 1 # get last global_step and start the next one
         print ("Start from:", start)
         
-        batch_x, batch_y, _, _ = utils.batch_generator(train_x, train_y, one_hot=not FLAGS.SAMPLE).next()
+        batch_x, batch_y, _, _ = utils.batch_generator(train_x, train_y, one_hot=not FLAGS.SAMPLE, actually_zero=True).next()
         batch_fake_c = np.zeros([FLAGS.BATCH_SIZE], dtype=np.int32)
         batch_z = sample_Z([FLAGS.BATCH_SIZE, FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE])
         batch_samples = model.run_samples(sess, batch_fake_c, batch_z)
@@ -206,7 +220,7 @@ def train(model, train_x, train_y, val_x, val_y, fold_num):
         for cur_epoch in tqdm(range(start, FLAGS.EPOCHS), desc='Fold ' + str(fold_num) + ': Epoch', total=FLAGS.EPOCHS-start):
             disc_steps = 1
             step_ctr = 0
-            for batch_x, batch_y, _, _ in tqdm(utils.batch_generator(train_x, train_y, one_hot=not FLAGS.SAMPLE), desc='Batch', total=len(train_y)/FLAGS.BATCH_SIZE):
+            for batch_x, batch_y, _, _ in tqdm(utils.batch_generator(train_x, train_y, one_hot=not FLAGS.SAMPLE, actually_zero=True), desc='Batch', total=len(train_y)/FLAGS.BATCH_SIZE):
                 batch_z = sample_Z([batch_x.shape[0], FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE])
                 batch_fake_c = sample_C(batch_x.shape[0])
                 for j in range(1):
@@ -217,38 +231,49 @@ def train(model, train_x, train_y, val_x, val_y, fold_num):
                 step_ctr += 1
                 if step_ctr == disc_steps:
                     step_ctr = 0
-                    for j in range(1):
-                        batch_z = sample_Z([batch_x.shape[0], FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE])
-                        g_batch_fake_c = sample_C(batch_x.shape[0])
-                        _, G_loss_curr, batch_samples, batch_probs, summary, logits, pure_logits, vague_weights  = model.run_G_train_step(
-                            sess, batch_z, g_batch_fake_c)
-            
-                    generated_sequences = batch_samples
+                    if FLAGS.TRAIN_GENERATOR:
+                        for j in range(1):
+                            batch_z = sample_Z([batch_x.shape[0], FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE])
+                            g_batch_fake_c = sample_C(batch_x.shape[0])
+                            _, G_loss_curr, batch_samples, batch_probs, summary, logits, pure_logits  = model.run_G_train_step(
+                                sess, batch_z, g_batch_fake_c)
+                    else:
+                        summary = model.run_summary(sess) 
+                    
+#                     weights = utils.get_variable_by_name('G_/output_weights:0')
+#                     w = weights.eval()
+#                     print(np.histogram(w))
 #                     print('Fold', fold_num, 'Epoch: ', cur_epoch,)
 #                     print('Instance ', cur, ' out of ', data_len)
                     out = ''
+                    out += 'Fold: {:}\t'. format(fold_num)
+                    out += 'Epoch: {:}\t'. format(cur_epoch)
                     out += 'D loss: {:.4}\t'. format(D_loss_curr)
-                    out += 'G_loss: {:.4}\t'.format(G_loss_curr)
+                    if FLAGS.TRAIN_GENERATOR:
+                        out += 'G_loss: {:.4}\t'.format(G_loss_curr)
                     out += 'Real S acc: {:.4}\t'.format(real_acc) 
                     out += ' Fake S acc: {:.4}\t'.format(fake_acc)
                     out += 'Real C acc: {:.4}\t'.format(real_class_acc)
                     out += ' Fake C acc: {:.4}\n'.format(fake_class_acc)
                     tqdm.write(out)
 #                     out += 'Samples', generated_sequences)
-                    out = ''
-                    for i in range(min(6, len(generated_sequences))):
-                        for j in range(len(generated_sequences[i])):
-                            if generated_sequences[i][j] == 0:
-                                out += '<UNK> '
-                            else:
-                                word = d[generated_sequences[i][j]]
-                                out += word + ' '
-                        out += '(' + str(g_batch_fake_c[i]) + ')\n\n'
-                    tqdm.write(out)
-            train_writer.add_summary(summary, step)
-            step += 1
+                    if FLAGS.TRAIN_GENERATOR:
+                        out = ''
+                        generated_sequences = batch_samples
+                        for i in range(min(6, len(generated_sequences))):
+                            for j in range(len(generated_sequences[i])):
+                                if generated_sequences[i][j] == 0:
+                                    out += '_ '
+                                else:
+                                    word = d[generated_sequences[i][j]]
+                                    out += word + ' '
+                            out += '(' + str(g_batch_fake_c[i]) + ')\n\n'
+                        tqdm.write(out)
+                    train_writer.add_summary(summary, step)
+                    step += 1
             if cur_epoch % 1 == 0:
-                save_samples_to_file(generated_sequences, g_batch_fake_c, fold_num, cur_epoch)
+                if FLAGS.TRAIN_GENERATOR:
+                    save_samples_to_file(generated_sequences, g_batch_fake_c, fold_num, cur_epoch)
             
             print ('saving model to file:')
     #         global_step.assign(cur_epoch).eval() # set and update(eval) global_step with index, cur_epoch
@@ -297,7 +322,7 @@ def test(model, test_x, test_y, fold_num):
             print (ckpt_model_path)
             saver.restore(sess, ckpt_model_path) # restore all variables
         predictions = []
-        for batch_x, batch_y, _, _ in tqdm(utils.batch_generator(test_x, test_y, batch_size=1, one_hot=not FLAGS.SAMPLE), desc='Fold ' + str(fold_num) + ':Testing', total=len(test_y)):
+        for batch_x, batch_y, _, _ in tqdm(utils.batch_generator(test_x, test_y, batch_size=1, one_hot=not FLAGS.SAMPLE, actually_zero=True), desc='Fold ' + str(fold_num) + ':Testing', total=len(test_y)):
 #         for batch_x, batch_y, cur, data_len in batch_generator(test_x, test_y):
             batch_predictions = model.run_test(sess, batch_x)
             predictions.append(batch_predictions)

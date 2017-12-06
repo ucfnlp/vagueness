@@ -12,14 +12,14 @@ import load
 import argparse
 from tqdm import tqdm
 
-train_variables_file = '../models/lm_ckpts/tf_lm_variables.npz'
+train_variables_file = '../models/lm_ckpts_l2/tf_lm_variables.npz'
 dataset_file = '../data/dataset.h5'
 embedding_weights_file = '../data/embedding_weights.h5'
 dictionary_file = '../data/words.dict'
 output_dataset_file = '../data/generated_dataset.h5'
 output_sentences_file = '../data/generated_dataset_words.txt'
 annotated_dataset_file = '../data/annotated_dataset.h5'
-
+start_symbol_index = 2
 validation_ratio = 0.1
 
 FLAGS = tf.app.flags.FLAGS
@@ -61,7 +61,7 @@ np.random.seed(FLAGS.RANDOM_SEED)
     
 print('loading model parameters')
 params = np.load(train_variables_file)
-    
+# print (params.keys())
 embedding_weights = load.load_embedding_weights()
     
 d, word_to_id = load.load_dictionary()
@@ -84,24 +84,29 @@ vague_terms_tensor = tf.constant(vague_terms, dtype=tf.float32)
 def create_vague_weights(vague_terms, fake_c):
     a = tf.tile(vague_terms, dims)
     b = tf.reshape(a,[-1,FLAGS.VOCAB_SIZE])
-    vague_weights = tf.multiply(b,tf.cast(tf.reshape(fake_c*2 - 2, [-1,1]),tf.float32))
+    vague_weights = tf.multiply(b,tf.cast(tf.reshape(fake_c - 1, [-1,1]),tf.float32))
     return vague_weights
+# embedding_matrix = tf.get_variable(shape=[FLAGS.VOCAB_SIZE, FLAGS.EMBEDDING_SIZE],
+#                             initializer=tf.contrib.layers.xavier_initializer(), name='embedding_matrix')
 vague_weights = create_vague_weights(vague_terms_tensor, c)
-z = tf.placeholder(tf.float32, [FLAGS.BATCH_SIZE, FLAGS.LATENT_SIZE], name='z')
+z = tf.placeholder(tf.float32, [None, FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE], name='z')
 ones = tf.ones(shape=[FLAGS.BATCH_SIZE, FLAGS.SEQUENCE_LEN], dtype=tf.int32)
-start_symbol_input = tf.unstack(ones + ones, axis=1)
+start_symbol_input = [tf.fill(dims, start_symbol_index) for i in range(FLAGS.SEQUENCE_LEN)]
+gumbel_noise = z if FLAGS.GUMBEL else None
+gumbel_mu = tf.constant(0.)
+gumbel_sigma = tf.constant(1.)
 cell = utils.create_cell(1.)
 
-def sample_Z(m, n):
-    return np.zeros((m, n))
+def sample_Z(size):
+    return np.random.gumbel(size=size)
 #     return np.random.normal(size=[m, n], scale=FLAGS.HIDDEN_NOISE_STD_DEV)
 def sample_C(m):
     return np.random.randint(low=0, high=FLAGS.NUM_CLASSES, size=m)
 
 W = tf.Variable(tf.random_normal([FLAGS.LATENT_SIZE, FLAGS.VOCAB_SIZE]), name='W')    
 b = tf.Variable(tf.random_normal([FLAGS.VOCAB_SIZE]), name='b')    
-initial_state = tf.contrib.rnn.LSTMStateTuple(z,z)
-outputs, states, samples, probs, logits = embedding_rnn_decoder(start_symbol_input,   # is this ok? I'm not sure what giving 0 inputs does (although it should be completely ignoring inputs)
+initial_state = tf.contrib.rnn.LSTMStateTuple(tf.zeros([dims[0], FLAGS.LATENT_SIZE]), tf.zeros([dims[0], FLAGS.LATENT_SIZE]))
+outputs, states, samples, probs, logits, pure_logits = embedding_rnn_decoder(start_symbol_input,   # is this ok? I'm not sure what giving 0 inputs does (although it should be completely ignoring inputs)
                                   initial_state,
                                   cell,
                                   FLAGS.VOCAB_SIZE,
@@ -111,9 +116,12 @@ outputs, states, samples, probs, logits = embedding_rnn_decoder(start_symbol_inp
                                   update_embedding_for_previous=True,
                                   sample_from_distribution=FLAGS.SAMPLE,
                                   vague_weights=vague_weights,
+#                                   embedding_matrix=embedding_matrix,
                                   hidden_noise_std_dev=None,
-                                  vocab_noise_std_dev=FLAGS.VOCAB_NOISE_STD_DEV,
-                                  gumbel=FLAGS.GUMBEL)
+                                  vocab_noise_std_dev=None,
+                                  gumbel=gumbel_noise,
+                                  gumbel_mu=gumbel_mu,
+                                  gumbel_sigma=gumbel_sigma)
 #                                   class_embedding=c_embedding)
 samples = tf.cast(tf.stack(samples, axis=1), tf.int32)
 probs = tf.stack(probs, axis=1)
@@ -123,10 +131,10 @@ logits = tf.stack(logits, axis=1)
 # logits = tf.reshape(logits, [-1, FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE])
 tvars = tf.trainable_variables()
 tvar_names = [var.name for var in tvars]
-    
+# print(tvar_names)
 assign_ops = []
 for pair in param_names.LSTM_TEST_PARAMS.VARIABLE_PAIRS:
-    assign_ops.append(utils.assign_variable_op(params, tvars, pair[0], pair[1]))
+    assign_ops.append(utils.assign_variable_op(params, pair[0], pair[1]))
 predictions = tf.cast(tf.argmax(logits, axis=2, name='predictions'), tf.int32)
 
 def remove_trailing_words(samples):
@@ -166,7 +174,7 @@ with tf.Session() as sess:
 #     utils.Progress_Bar.startProgress('generating sentences')	
     for output_idx in tqdm(range(0, FLAGS.NUM_OUTPUT_SENTENCES, FLAGS.BATCH_SIZE), desc='batch'):
     	batch_c = sample_C(FLAGS.BATCH_SIZE)
-        batch_z = sample_Z(FLAGS.BATCH_SIZE, FLAGS.LATENT_SIZE)
+        batch_z = sample_Z([FLAGS.BATCH_SIZE, FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE])
         batch_samples = sess.run(samples, feed_dict={c: batch_c, z: batch_z})
         x[output_idx:output_idx+FLAGS.BATCH_SIZE] = batch_samples
         y[output_idx:output_idx+FLAGS.BATCH_SIZE] = batch_c
@@ -179,7 +187,7 @@ with tf.Session() as sess:
                     if not np.any(batch_samples[i,j:]):
                         break
                     else:
-                        output += '<UNK> '
+                        output += '_ '
                 else:
                     word = d[batch_samples[i][j]]
                     output += word + ' '
@@ -195,7 +203,7 @@ for i in range(len(x)):
             if not np.any(x[i,j:]):
                 break
             else:
-                output += '<UNK> '
+                output += '_ '
         else:
             word = d[x[i][j]]
             output += word + ' '

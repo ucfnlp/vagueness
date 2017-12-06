@@ -89,7 +89,9 @@ def _extract_argmax_and_embed(embedding,
                               vague_weights=None,
                               fixed_embedding=None,
                               vocab_noise_std_dev=None,
-                              gumbel=None):
+                              gumbel=None,
+                              gumbel_mu=None,
+                              gumbel_sigma=None):
   """Get a loop_function that extracts the previous symbol and embeds it.
 
   Args:
@@ -115,6 +117,7 @@ def _extract_argmax_and_embed(embedding,
 #       prev = utils.gaussian_noise_layer(prev, std=vocab_noise_std_dev)
     if gumbel is not None:
       g = unstacked_gumbel[i]
+#       prev = prev + gumbel_mu + (g*gumbel_sigma)
       prev = prev + g
     probabilities = tf.nn.softmax(prev)
     prev_symbol = math_ops.argmax(prev, 1)
@@ -324,7 +327,9 @@ def embedding_rnn_decoder(decoder_inputs,
                           fixed_embedding=None,
                           hidden_noise_std_dev=None,
                           vocab_noise_std_dev=None,
-                          gumbel=None):
+                          gumbel=None,
+                          gumbel_mu=None,
+                          gumbel_sigma=None):
   """RNN decoder with embedding and a pure-decoding option.
 
   Args:
@@ -393,7 +398,7 @@ def embedding_rnn_decoder(decoder_inputs,
         loop_function = _extract_argmax_and_embed(
             embedding, output_projection,
             update_embedding_for_previous, vague_weights, fixed_embedding,
-            vocab_noise_std_dev, gumbel) if feed_previous else None
+            vocab_noise_std_dev, gumbel, gumbel_mu, gumbel_sigma) if feed_previous else None
     emb_inp = (embedding_ops.embedding_lookup(embedding, i)
                for i in decoder_inputs)
     return rnn_decoder(

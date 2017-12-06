@@ -5,9 +5,10 @@ import tensorflow as tf
 from tensorflow.contrib.rnn import BasicRNNCell, BasicLSTMCell, GRUCell
 import sys
 from sklearn import metrics
-import os
+import os, shutil
 import param_names
 
+tensorboard_dir = '/home/logan/tensorboard'
 FLAGS = tf.app.flags.FLAGS
 
 def create_cell(keep_prob, reuse=False):
@@ -25,20 +26,24 @@ def gaussian_noise_layer(input_layer, std=1.0):
     noise = tf.random_normal(shape=tf.shape(input_layer), mean=0.0, stddev=std, dtype=tf.float32) 
     return input_layer + noise
 
-def get_variable_by_name(tvars, name):
-    list = [v for v in tvars if v.name == name]
+def get_variable_by_name(name):
+    list = [v for v in tf.global_variables() if v.name == name]
     if len(list) <= 0:
         if name == param_names.GEN_LSTM_WEIGHTS:
-            return get_variable_by_name(tvars, param_names.ALTERNATIVE_GEN_LSTM_WEIGHTS)
+            return get_variable_by_name(param_names.ALTERNATIVE_GEN_LSTM_WEIGHTS)
         if name == param_names.GEN_LSTM_BIASES:
-            return get_variable_by_name(tvars, param_names.ALTERNATIVE_GEN_LSTM_BIASES)
+            return get_variable_by_name(param_names.ALTERNATIVE_GEN_LSTM_BIASES)
+        if name == param_names.TEST_LSTM_WEIGHTS:
+            return get_variable_by_name(param_names.ALTERNATIVE_TEST_LSTM_WEIGHTS)
+        if name == param_names.TEST_LSTM_BIASES:
+            return get_variable_by_name(param_names.ALTERNATIVE_TEST_LSTM_BIASES)
         raise Exception('No variable found by name: ' + name)
     if len(list) > 1:
         raise Exception('Multiple variables found by name: ' + name)
     return list[0]
 
-def assign_variable_op(params, tvars, pretrained_name, cur_name, append=False): #TODO change becuase not using class embedding here
-    var = get_variable_by_name(tvars, cur_name)
+def assign_variable_op(params, pretrained_name, cur_name, append=False): #TODO change becuase not using class embedding here
+    var = get_variable_by_name(cur_name)
     pretrained_value = params[pretrained_name]
     if append:
         extra_weights = np.random.normal(size=(FLAGS.CLASS_EMBEDDING_SIZE, pretrained_value.shape[1]))
@@ -131,20 +136,23 @@ class Progress_Bar:
         sys.stdout.write("#" * (40 - progress_x) + "]\n")
         sys.stdout.flush()
         
-def create_leaky_one_hot_table():
-    epsilon = 0.0001
+def create_leaky_one_hot_table(actually_zero=False):
+#     epsilon = 0.0001
     I = np.eye(FLAGS.VOCAB_SIZE)
-    I_excluding_first_row = I[1:,:]     # exclude first row, which is padding
-                                        # we don't want to leak padding because the generator creates
-                                        # perfect one-hot padding at end of sentence
-    
-    # add a small probability for each possible word in training set
-    I_excluding_first_row[I_excluding_first_row == 0] = epsilon
-    I_excluding_first_row[I_excluding_first_row == 0] = 1 - (epsilon * FLAGS.VOCAB_SIZE)
+#     I_excluding_first_row = I[1:,:]     # exclude first row, which is padding
+#                                         # we don't want to leak padding because the generator creates
+#                                         # perfect one-hot padding at end of sentence
+#     
+#     # add a small probability for each possible word in training set
+#     I_excluding_first_row[I_excluding_first_row == 0] = epsilon
+#     I_excluding_first_row[I_excluding_first_row == 0] = 1 - (epsilon * FLAGS.VOCAB_SIZE)
+
+    if actually_zero:
+        I[0,:] = 0      # Set PADDING symbol to be [0,0,0,0...], rather than [1,0,0,0...]
     return I
         
-def batch_generator(x, y, batch_size=64, one_hot=False):
-    one_hot_table = create_leaky_one_hot_table()
+def batch_generator(x, y, batch_size=64, one_hot=False, actually_zero=False):
+    one_hot_table = create_leaky_one_hot_table(actually_zero)
     data_len = x.shape[0]
     for i in range(0, data_len, batch_size):
         x_batch = x[i:min(i+batch_size,data_len)]
@@ -168,7 +176,20 @@ def create_dirs(dir, num_folds):
         fold_dir = dir + '/' + str(fold_num)
         if not os.path.exists(fold_dir):
             os.makedirs(fold_dir)
-        
+            
+def delete_contents(folder):
+    for the_file in os.listdir(folder):
+        file_path = os.path.join(folder, the_file)
+        try:
+            if os.path.isfile(file_path):
+                os.unlink(file_path)
+            #elif os.path.isdir(file_path): shutil.rmtree(file_path)
+        except Exception as e:
+            print(e)
+            
+def clear_tensorboard(name):
+    folder = os.path.join(tensorboard_dir, name)
+    delete_contents(folder)
         
         
         

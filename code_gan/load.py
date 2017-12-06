@@ -12,7 +12,7 @@ generated_dataset_file = os.path.join('..','data','generated_dataset.h5')
 embedding_weights_file = os.path.join('..','data','embedding_weights.h5')
 dictionary_file = os.path.join('..','data','words.dict')
 # train_variables_file = os.path.join('..','models', 'lm_ckpts', 'tf_lm_variables.npz')
-train_variables_file = os.path.join('..','models', 'lm_ckpts', 'tf_lm_variables.npz')
+train_variables_file = os.path.join('..','models', 'lm_ckpts_l2', 'tf_lm_variables.npz')
 vague_terms_file = os.path.join('..','data','vague_terms')
     
 def load_annotated_data(fold_num=0):

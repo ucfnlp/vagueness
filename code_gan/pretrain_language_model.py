@@ -11,7 +11,7 @@ import load
 import argparse
 import os
 
-ckpt_dir = '../models/lm_ckpts'
+ckpt_dir = '../models/lm_ckpts_l2'
 variables_file = ckpt_dir + '/tf_lm_variables.npz'
 dataset_file = '../data/dataset.h5'
 fast = False
@@ -35,6 +35,8 @@ tf.app.flags.DEFINE_string('CELL_TYPE', 'LSTM',
                             'Which RNN cell for the RNNs.')
 tf.app.flags.DEFINE_integer('RANDOM_SEED', 123,
                             'Random seed used for numpy and tensorflow (dropout, sampling)')
+tf.app.flags.DEFINE_float('L2_LAMBDA', 1e-6,
+                            'L2 regularization lambda parameter')
 tf.set_random_seed(FLAGS.RANDOM_SEED)
 np.random.seed(FLAGS.RANDOM_SEED)
 
@@ -85,9 +87,10 @@ loss = tf.contrib.seq2seq.sequence_loss(
         average_across_timesteps=False,
         average_across_batch=True
     )
-cost = tf.reduce_sum(loss)
 tvars = tf.trainable_variables()
 tvar_names = [var.name for var in tvars]
+l2_loss = tf.add_n([ tf.nn.l2_loss(v) for v in tvars if 'bias' not in v.name ]) * FLAGS.L2_LAMBDA
+cost = tf.reduce_mean(loss) + l2_loss
 # TODO: change to rms optimizer
 optimizer = tf.train.AdamOptimizer().minimize(cost, var_list=tvars)
 predictions = tf.cast(tf.argmax(logits, axis=2, name='predictions'), tf.int32)

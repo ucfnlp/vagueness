@@ -28,7 +28,8 @@ class ACGANModel(object):
                                self.keep_prob: FLAGS.KEEP_PROB})
     
     def run_G_train_step(self, sess, z, batch_fake_c):
-        to_return = [self.G_solver, self.G_loss, self.samples, self.probs, self.merged, self.logits, self.pure_logits, self.vague_weights]
+        to_return = [self.G_solver, self.G_loss, self.samples, self.probs, self.merged, 
+                     self.logits, self.pure_logits]
         return sess.run(to_return,
                     feed_dict={self.fake_c: batch_fake_c,
                                self.z: z,
@@ -78,16 +79,16 @@ class ACGANModel(object):
         
         # Initialization doesn't matter here, since the embedding matrix is
         # being replaced with the pretrained parameters
-        self.embedding_matrix = tf.get_variable(shape=[FLAGS.VOCAB_SIZE, FLAGS.EMBEDDING_SIZE], 
+        self.embedding_matrix = tf.get_variable(shape=[FLAGS.VOCAB_SIZE, FLAGS.EMBEDDING_SIZE],
                             initializer=tf.contrib.layers.xavier_initializer(), name='embedding_matrix')
-        self.gumbel_mu = tf.get_variable(name='gumbel_mu', initializer=tf.constant(0.))
-        self.gumbel_sigma = tf.get_variable(name='gumbel_sigma', initializer=tf.constant(1.))
+        self.gumbel_mu = tf.get_variable(name='gumbel_mu', initializer=tf.constant(0.), trainable=False)
+        self.gumbel_sigma = tf.get_variable(name='gumbel_sigma', initializer=tf.constant(1.), trainable=False)
         self.keep_prob = tf.placeholder(tf.float32)
         
     def _add_acgan(self):
         with tf.variable_scope(tf.get_variable_scope()) as scope:
             self.G_sample, self.samples, self.probs, self.u, self.m, self.logits, self.pure_logits, self.vague_weights = generator(self.z, self.fake_c, self.vague_terms,
-                 self.embedding_matrix, self.keep_prob) #TODO move to generator
+                 self.embedding_matrix, self.keep_prob, self.gumbel_mu, self.gumbel_sigma) #TODO move to generator
             self.D_real, self.D_logit_real, self.D_class_logit_real = discriminator(self.real_x, 
                  self.embedding_matrix, self.keep_prob)
             tf.get_variable_scope().reuse_variables()
@@ -134,10 +135,10 @@ class ACGANModel(object):
         tvars   = tf.trainable_variables() 
         theta_D = [var for var in tvars if 'D_' in var.name]
         theta_G = [var for var in tvars if 'G_' in var.name]
-        theta_D.append(self.embedding_matrix)
-        theta_G.append(self.embedding_matrix)
-        D_lossL2 = tf.add_n([ tf.nn.l2_loss(v) for v in theta_D ]) * FLAGS.L2_LAMBDA
-        G_lossL2 = tf.add_n([ tf.nn.l2_loss(v) for v in theta_G ]) * FLAGS.L2_LAMBDA
+#         theta_D.append(self.embedding_matrix)
+#         theta_G.append(self.embedding_matrix)
+        D_lossL2 = tf.add_n([ tf.nn.l2_loss(v) for v in theta_D if 'bias' not in v.name ]) * FLAGS.L2_LAMBDA
+        G_lossL2 = tf.add_n([ tf.nn.l2_loss(v) for v in theta_G if 'bias' not in v.name ]) * FLAGS.L2_LAMBDA
         self.D_loss += D_lossL2
         self.G_loss += G_lossL2
         
@@ -153,15 +154,16 @@ class ACGANModel(object):
             append = False
         #     if pair[1] == param_names.GEN_GRU_GATES_WEIGHTS or pair[1] == param_names.GEN_GRU_CANDIDATE_WEIGHTS:
         #         append = True
-            self.assign_ops.append(utils.assign_variable_op(self.params, tvars, pair[0], pair[1], append=append))
+            self.assign_ops.append(utils.assign_variable_op(self.params, pair[0], pair[1], append=append))
         
     def _add_optimizer(self):
         tvars = tf.trainable_variables()
         theta_D = [var for var in tvars if 'D_' in var.name]
         theta_G = [var for var in tvars if 'G_' in var.name]
 #         theta_G = [var for var in tvars if 'G_' in var.name or 'D_' in var.name]
-        theta_D.append(self.embedding_matrix)
-        theta_G.append(self.embedding_matrix)
+        if FLAGS.TRAIN_EMBEDDING:
+            theta_D.append(self.embedding_matrix)
+            theta_G.append(self.embedding_matrix)
         self.D_solver = tf.train.AdamOptimizer().minimize(self.D_loss, var_list=theta_D)
         self.G_solver = tf.train.AdamOptimizer().minimize(self.G_loss, var_list=theta_G)
         for var in theta_D:

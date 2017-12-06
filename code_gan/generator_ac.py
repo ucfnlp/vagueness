@@ -3,12 +3,11 @@ import tensorflow as tf
 from seq2seq import  embedding_rnn_decoder
 from tensorflow.contrib.rnn import BasicRNNCell, BasicLSTMCell, GRUCell
 import utils
-from networkx.algorithms.shortest_paths import weighted
 
 FLAGS = tf.app.flags.FLAGS
 start_symbol_index = 2
 
-def generator(z, c, initial_vague_terms, embedding_matrix, keep_prob):
+def generator(z, c, initial_vague_terms, embedding_matrix, keep_prob, gumbel_mu, gumbel_sigma):
     
     with tf.variable_scope("G_"):
         cell = utils.create_cell(keep_prob)
@@ -22,13 +21,16 @@ def generator(z, c, initial_vague_terms, embedding_matrix, keep_prob):
         biases = tf.get_variable("output_biases", shape=[FLAGS.VOCAB_SIZE],
            initializer=tf.zeros_initializer())
         
-        vague_terms = tf.get_variable(initializer=tf.constant(initial_vague_terms), dtype=tf.float32, name='vague_terms')
-        def create_vague_weights(vague_terms, c):
-            a = tf.tile(vague_terms, dims)
-            b = tf.reshape(a,[-1,FLAGS.VOCAB_SIZE])
-            vague_weights = tf.multiply(b,tf.cast(tf.reshape(c*2 - 2, [-1,1]),tf.float32))
-            return vague_weights
-        vague_weights = create_vague_weights(vague_terms, c)
+        if FLAGS.USE_VAGUE_VECTOR:
+            vague_terms = tf.get_variable(initializer=tf.constant(initial_vague_terms, dtype=tf.float32), dtype=tf.float32, name='vague_terms')
+            def create_vague_weights(vague_terms, c):
+                a = tf.tile(vague_terms, dims)
+                b = tf.reshape(a,[-1,FLAGS.VOCAB_SIZE])
+                vague_weights = tf.multiply(b,tf.cast(tf.reshape(c - 1, [-1,1]),tf.float32))
+                return vague_weights
+            vague_weights = create_vague_weights(vague_terms, c)
+        else:
+            vague_weights = None
         
         outputs, states, samples, probs, logits, pure_logits = embedding_rnn_decoder(start_symbol_input,   # is this ok? I'm not sure what giving 0 inputs does (although it should be completely ignoring inputs)
                                   initial_state,
@@ -43,7 +45,9 @@ def generator(z, c, initial_vague_terms, embedding_matrix, keep_prob):
                                   embedding_matrix=embedding_matrix,
                                   hidden_noise_std_dev=None,
                                   vocab_noise_std_dev=None,
-                                  gumbel=gumbel_noise)
+                                  gumbel=gumbel_noise,
+                                  gumbel_mu=gumbel_mu,
+                                  gumbel_sigma=gumbel_sigma)
 #                                   class_embedding=c_embedding),
 
         samples = tf.cast(tf.stack(samples, axis=1), tf.int32)
