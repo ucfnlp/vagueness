@@ -33,7 +33,7 @@ def cnn(embeddings, keep_prob, mask=None):
                 
                 # Maxpooling over the outputs
                 pooled = tf.nn.max_pool(
-                    h,
+                    masked_h,
                     ksize=[1, FLAGS.SEQUENCE_LEN - filter_size + 1, 1, 1],
                     strides=[1, 1, 1, 1],
                     padding='VALID',
