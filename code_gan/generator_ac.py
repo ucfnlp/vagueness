@@ -32,7 +32,7 @@ def generator(z, c, initial_vague_terms, embedding_matrix, keep_prob, gumbel_mu,
         else:
             vague_weights = None
         
-        outputs, states, samples, probs, logits, pure_logits = embedding_rnn_decoder(start_symbol_input,   # is this ok? I'm not sure what giving 0 inputs does (although it should be completely ignoring inputs)
+        outputs, states, samples, probs, logits, pure_logits, inps = embedding_rnn_decoder(start_symbol_input,   # is this ok? I'm not sure what giving 0 inputs does (although it should be completely ignoring inputs)
                                   initial_state,
                                   cell,
                                   FLAGS.VOCAB_SIZE,
@@ -80,7 +80,7 @@ def generator(z, c, initial_vague_terms, embedding_matrix, keep_prob, gumbel_mu,
         for i in range(len(x)):
             x[i] = tf.multiply(x[i], u[i])
 
-        return x, samples, probs, u, m, logits, pure_logits, vague_weights
+        return x, samples, probs, u, m, logits, pure_logits, vague_weights, inps
 
 
 

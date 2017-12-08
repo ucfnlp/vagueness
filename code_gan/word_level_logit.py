@@ -364,8 +364,13 @@ def run_on_fold(mode, fold_num):
     else:
         x = np.concatenate([train_x_word, val_x_word, test_x_word])
         y = np.concatenate([train_y_word, val_y_word, test_y_word])
+        print(x.shape)
+#         id_to_vague = test(test_x_word, test_y_word, fold_num)
         id_to_vague = test(x, y, fold_num)
-        predict_on_sentences(test_x, test_y, test_weights, id_to_vague, fold_num)
+        print('0s ', id_to_vague.values().count(0))
+        print('1s ', id_to_vague.values().count(1))
+        print('total', len(id_to_vague.values()))
+#         predict_on_sentences(test_x, test_y, test_weights, id_to_vague, fold_num)
         
         
 def run_in_mode(mode, one_fold):

@@ -29,7 +29,7 @@ class ACGANModel(object):
     
     def run_G_train_step(self, sess, z, batch_fake_c):
         to_return = [self.G_solver, self.G_loss, self.samples, self.probs, self.merged, 
-                     self.logits, self.pure_logits]
+                     self.logits, self.pure_logits, self.inps]
         return sess.run(to_return,
                     feed_dict={self.fake_c: batch_fake_c,
                                self.z: z,
@@ -87,7 +87,7 @@ class ACGANModel(object):
         
     def _add_acgan(self):
         with tf.variable_scope(tf.get_variable_scope()) as scope:
-            self.G_sample, self.samples, self.probs, self.u, self.m, self.logits, self.pure_logits, self.vague_weights = generator(self.z, self.fake_c, self.vague_terms,
+            self.G_sample, self.samples, self.probs, self.u, self.m, self.logits, self.pure_logits, self.vague_weights, self.inps = generator(self.z, self.fake_c, self.vague_terms,
                  self.embedding_matrix, self.keep_prob, self.gumbel_mu, self.gumbel_sigma) #TODO move to generator
             self.D_real, self.D_logit_real, self.D_class_logit_real = discriminator(self.real_x, 
                  self.embedding_matrix, self.keep_prob)
@@ -112,10 +112,12 @@ class ACGANModel(object):
             self.D_class_logit_fake, axis=1), tf.int32), self.fake_c), tf.float32)) /  tf.cast(
                 tf.shape(self.fake_c)[0], tf.float32)
     
-        self.D_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
-            logits=self.D_logit_real, labels=tf.ones_like(self.D_logit_real)))
-        self.D_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
-            logits=self.D_logit_fake, labels=tf.zeros_like(self.D_logit_fake)))
+#         self.D_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
+#             logits=self.D_logit_real, labels=tf.ones_like(self.D_logit_real)))
+#         self.D_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
+#             logits=self.D_logit_fake, labels=tf.zeros_like(self.D_logit_fake)))
+        self.D_loss_real = -tf.reduce_mean(tf.log(tf.sigmoid(self.D_logit_real)))
+        self.D_loss_fake = -tf.reduce_mean(tf.log(1-tf.sigmoid(self.D_logit_fake)))
 #         ones = tf.ones(tf.stack([tf.shape(self.D_logit_real)[0],]), dtype=tf.int32)
 #         zeros = tf.zeros(tf.stack([tf.shape(self.D_logit_fake)[0],]), dtype=tf.int32)
 #         self.D_loss_real = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
@@ -128,8 +130,9 @@ class ACGANModel(object):
             logits=self.D_class_logit_fake, labels=self.fake_c))
         self.D_loss = FLAGS.SOURCE_LOSS_WEIGHT*(self.D_loss_real + self.D_loss_fake) + (
             self.D_loss_class_real)*FLAGS.REAL_CLASS_LOSS_WEIGHT + self.D_loss_class_fake*FLAGS.FAKE_CLASS_LOSS_WEIGHT
-        self.G_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
-            logits=self.D_logit_fake, labels=tf.ones_like(self.D_logit_fake)))
+#         self.G_loss_fake = -tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
+#             logits=self.D_logit_fake, labels=tf.ones_like(self.D_logit_fake)))
+        self.G_loss_fake = -tf.reduce_mean(tf.log(tf.sigmoid(self.D_logit_fake)))
         self.G_loss = FLAGS.FAKE_CLASS_LOSS_WEIGHT*self.D_loss_class_fake + FLAGS.SOURCE_LOSS_WEIGHT*self.G_loss_fake
         
         tvars   = tf.trainable_variables() 

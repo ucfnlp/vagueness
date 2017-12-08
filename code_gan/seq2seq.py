@@ -212,6 +212,7 @@ def rnn_decoder(decoder_inputs,
     probabilities = []
     logits = []
     pure_logits = []
+    inps = []
     prev = None
     for i, inp in enumerate(decoder_inputs):
       if loop_function is not None and prev is not None:
@@ -221,6 +222,7 @@ def rnn_decoder(decoder_inputs,
           probabilities.append(probability)
           logits.append(logit)
           pure_logits.append(pure_logit)
+          inps.append(inp)
       if i > 0:
         variable_scope.get_variable_scope().reuse_variables()
 #       if hidden_noise_std_dev is not None:
@@ -234,7 +236,8 @@ def rnn_decoder(decoder_inputs,
     probabilities.append(probability)
     logits.append(logit)
     pure_logits.append(pure_logit)
-    return outputs, state, samples, probabilities, logits, pure_logits
+    inps.append(inp)
+    return outputs, state, samples, probabilities, logits, pure_logits, inps
 
 
 def basic_rnn_seq2seq(encoder_inputs,

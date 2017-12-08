@@ -99,10 +99,10 @@ num_filters_total = FLAGS.NUM_FILTERS * len(filter_sizes)
 keep_prob = tf.placeholder(tf.float32, name='keep_prob')
 inputs = tf.placeholder(tf.int32, shape=(None, FLAGS.SEQUENCE_LEN), name='inputs')
 targets = tf.placeholder(tf.int32, shape=(None,), name='targets')
-
+weights = tf.placeholder(tf.float32, shape=(None, FLAGS.SEQUENCE_LEN), name='weights')
 embedding_tensor = tf.Variable(initial_value=embedding_weights, name='embedding_matrix')
 embeddings = tf.nn.embedding_lookup(embedding_tensor, inputs)
-pooled_outputs = cnn(embeddings, keep_prob)
+pooled_outputs = cnn(embeddings, keep_prob, mask=weights)
 
 # Final (unnormalized) scores and predictions
 with tf.name_scope("output"):
@@ -142,28 +142,30 @@ merged = tf.summary.merge_all()
 
 
     
-def validate(sess, val_x, val_y):
-    def run_val_step(sess, batch_x, batch_y):
+def validate(sess, val_x, val_y, val_weights):
+    def run_val_step(sess, batch_x, batch_y, batch_weights):
         to_return = loss
         return sess.run(to_return,
                     feed_dict={inputs: batch_x,
                                targets: batch_y,
+                               weights: batch_weights,
                                keep_prob: 1})
     sum_cost = 0
-    for batch_x, batch_y, cur, data_len in utils.batch_generator(val_x, val_y):
-        batch_cost = run_val_step(sess, batch_x, batch_y)
+    for batch_x, batch_y, batch_weights, cur, data_len in utils.batch_generator(val_x, val_y, weights=val_weights):
+        batch_cost = run_val_step(sess, batch_x, batch_y, batch_weights)
         sum_cost += batch_cost * len(batch_y)  # Add up cost based on how many instances in batch
     val_cost = sum_cost / len(val_y)
     return val_cost
     
     
-def train(train_x, train_y, val_x, val_y, fold_num):
+def train(train_x, train_y, train_weights, val_x, val_y, val_weights, fold_num):
     
-    def run_train_step(sess, batch_x, batch_y):
+    def run_train_step(sess, batch_x, batch_y, batch_weights):
         to_return = [optimizer, loss, accuracy, merged]
         return sess.run(to_return,
                     feed_dict={inputs: batch_x,
                                targets: batch_y,
+                               weights: batch_weights,
                                keep_prob: FLAGS.KEEP_PROB})
         
     
@@ -191,8 +193,8 @@ def train(train_x, train_y, val_x, val_y, fold_num):
         for cur_epoch in tqdm(range(start, FLAGS.EPOCHS), desc='Fold ' + str(fold_num) + ': Epoch'):
             disc_steps = 3
             step_ctr = 0
-            for batch_x, batch_y, _, _ in tqdm(utils.batch_generator(train_x, train_y), desc='Batch', total=len(train_y)/FLAGS.BATCH_SIZE):
-                _, batch_cost, batch_accuracy, summary = run_train_step(sess, batch_x, batch_y)
+            for batch_x, batch_y, batch_weights, _, _ in tqdm(utils.batch_generator(train_x, train_y, weights=train_weights), desc='Batch', total=len(train_y)/FLAGS.BATCH_SIZE):
+                _, batch_cost, batch_accuracy, summary = run_train_step(sess, batch_x, batch_y, batch_weights)
                 train_writer.add_summary(summary, step)
                 
 #                 tqdm.write('Fold', fold_num, 'Epoch: ', cur_epoch,)
@@ -206,7 +208,7 @@ def train(train_x, train_y, val_x, val_y, fold_num):
             variables = dict(zip(tvar_names, vars))
             np.savez(variables_file, **variables)
             
-            val_cost = validate(sess, val_x, val_y)
+            val_cost = validate(sess, val_x, val_y, val_weights)
             tqdm.write('Val Loss: ' + str(val_cost))
             if val_cost < min_val_cost:
                 min_val_cost = val_cost
@@ -222,17 +224,18 @@ def train(train_x, train_y, val_x, val_y, fold_num):
             
         
     
-def test(test_x, test_y, fold_num):
+def test(test_x, test_y, test_weights, fold_num):
     
-    def run_test_step(sess, batch_x):
+    def run_test_step(sess, batch_x, batch_weights):
         to_return = scores
         return sess.run(to_return,
                         feed_dict={inputs: batch_x,
+                               weights: batch_weights,
                                keep_prob: 1})
-    def predict(sess, x, y):
+    def predict(sess, x, y, test_weights):
         predictions = []
-        for batch_x, batch_y, _, _ in tqdm(utils.batch_generator(x, y, batch_size=1), desc='Fold ' + str(fold_num) + ':Testing', total=len(y)):
-            batch_predictions = run_test_step(sess, batch_x)
+        for batch_x, batch_y, batch_weights, _, _ in tqdm(utils.batch_generator(x, y, weights=test_weights, batch_size=1), desc='Fold ' + str(fold_num) + ':Testing', total=len(y)):
+            batch_predictions = run_test_step(sess, batch_x, batch_weights)
             predictions.append(batch_predictions)
         predictions = np.concatenate(predictions)
         predictions_indices = np.argmax(predictions, axis=1)
@@ -250,7 +253,7 @@ def test(test_x, test_y, fold_num):
         if ckpt and ckpt.model_checkpoint_path:
             print ckpt.model_checkpoint_path
             saver.restore(sess, ckpt.model_checkpoint_path)  # restore all variables
-        predictions_indices, _ = predict(sess, test_x, test_y)
+        predictions_indices, _ = predict(sess, test_x, test_y, test_weights)
         Metrics.print_and_save_metrics(test_y, predictions_indices)
         
     
@@ -259,12 +262,12 @@ def run_on_fold(mode, fold_num):
     if args.generated_dataset:
         train_x, train_y, val_x, val_y, test_x, test_y = load.load_generated_data()
     else:
-        train_x, _, train_y, _, val_x, _, val_y, _, test_x, _, test_y, _ = load.load_annotated_data(fold_num)
+        train_x, _, train_y, train_weights, val_x, _, val_y, val_weights, test_x, _, test_y, test_weights = load.load_annotated_data(fold_num)
 #     args.train = True
     if mode == 'train':
-        train(train_x, train_y, val_x, val_y, fold_num)
+        train(train_x, train_y, train_weights, val_x, val_y, val_weights, fold_num)
     else:
-        test(test_x, test_y, fold_num)
+        test(test_x, test_y, test_weights, fold_num)
         
 def run_in_mode(mode, one_fold):
     if one_fold:

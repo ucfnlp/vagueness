@@ -151,7 +151,7 @@ def create_leaky_one_hot_table(actually_zero=False):
         I[0,:] = 0      # Set PADDING symbol to be [0,0,0,0...], rather than [1,0,0,0...]
     return I
         
-def batch_generator(x, y, batch_size=64, one_hot=False, actually_zero=False):
+def batch_generator(x, y, weights=None, batch_size=64, one_hot=False, actually_zero=False):
     one_hot_table = create_leaky_one_hot_table(actually_zero)
     data_len = x.shape[0]
     for i in range(0, data_len, batch_size):
@@ -162,12 +162,18 @@ def batch_generator(x, y, batch_size=64, one_hot=False, actually_zero=False):
             x_batch_transpose = np.transpose(x_batch)
             x_batch_one_hot = one_hot_table[x_batch_transpose.astype(int)]
             x_batch_one_hot_reshaped = x_batch_one_hot.reshape([-1,FLAGS.SEQUENCE_LEN,FLAGS.VOCAB_SIZE])
-            
+            x_batch = x_batch_one_hot_reshaped
         y_batch = y[i:min(i+batch_size,data_len)]
-        if one_hot:
-            yield x_batch_one_hot_reshaped, y_batch, i, data_len
+        weights_batch = weights[i:min(i+batch_size,data_len)]
+        if weights is not None:
+            yield x_batch, y_batch, weights_batch, i, data_len
         else:
             yield x_batch, y_batch, i, data_len
+            
+#         if one_hot:
+#             yield x_batch_one_hot_reshaped, y_batch, i, data_len
+#         else:
+#             yield x_batch, y_batch, i, data_len
         
 def create_dirs(dir, num_folds):
     if not os.path.exists(dir):

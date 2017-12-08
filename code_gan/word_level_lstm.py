@@ -12,6 +12,9 @@ import os
 from sklearn import metrics
 import time
 from tqdm import tqdm
+import nltk
+from nltk.tag import pos_tag, map_tag
+from collections import Counter
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--train_only", help="run in train mode only",
@@ -69,7 +72,7 @@ utils.create_dirs(prediction_folder, num_folds)
         
 embedding_weights = load.load_embedding_weights()
 d, word_to_id = load.load_dictionary()
-
+d[0] = '_'
 Metrics = utils.Metrics(is_binary=True)
         
 '''
@@ -267,26 +270,53 @@ def test(test_x, test_y, test_weights, fold_num):
         total_predictions, _ = predict(sess, test_x, test_y, test_weights)
         Metrics.print_and_save_metrics(test_y.flatten(), total_predictions.flatten(), weights=test_weights.flatten())
         save_predictions_to_file(test_x, test_y, test_weights, total_predictions, fold_num)
-        
+        return total_predictions
         
         
 
-def run_on_fold(mode, fold_num):
-    train_x, train_y, _, train_weights, val_x, val_y, _, val_weights, test_x, test_y, _, test_weights = load.load_annotated_data(fold_num)
-#     args.train = True
-    if mode == 'train':
-        train(train_x, train_y, train_weights, val_x, val_y, val_weights, fold_num)
-    else:
-        test(test_x, test_y, test_weights, fold_num)
+def count_POS(y_pred, test_x, test_y, test_weights):
+    FP = np.logical_and(y_pred == 1, test_y == 0)
+    FP = np.logical_and(FP, test_weights)
+    FN = np.logical_and(y_pred == 0, test_y == 1)
+    FN = np.logical_and(FN, test_weights)
+    
+    pos_counts_clear = Counter([])
+    pos_counts_vague = Counter([])
+    for sent_idx, cur_sent in enumerate(test_x):
+        cur_predict = y_pred[sent_idx]
+        words = np.array([ d[id] for id in cur_sent])
+#             print(text)
+        posTagged = pos_tag(words)
+        tags = [item[1] for item in posTagged]
+        vague_words = [word for word_idx, word in enumerate(words) if cur_predict[word_idx] == 0]
+        clear_words = [word for word_idx, word in enumerate(words) if cur_predict[word_idx] == 1]
+        counts = Counter(tags)
+        pos_counts = pos_counts + counts
+    
+    
         
 def run_in_mode(mode, one_fold):
     if one_fold:
-        run_on_fold(mode, 0)
+        folds = [0]
     else:
-        for fold_num in range(num_folds):
-            run_on_fold(mode, fold_num)
+        folds = range(num_folds)
+        y_pred_combined = np.array([]).reshape([0,FLAGS.SEQUENCE_LEN])
+        x_test_combined = np.array([]).reshape([0,FLAGS.SEQUENCE_LEN])
+        y_test_combined = np.array([]).reshape([0,FLAGS.SEQUENCE_LEN])
+        y_weights_combined = np.array([]).reshape([0,FLAGS.SEQUENCE_LEN])
+    for fold_num in folds:
+        train_x, train_y, _, train_weights, val_x, val_y, _, val_weights, test_x, test_y, _, test_weights = load.load_annotated_data(fold_num)
+        if mode == 'train':
+            train(train_x, train_y, train_weights, val_x, val_y, val_weights, fold_num)
+        else:
+            y_pred = test(test_x, test_y, test_weights, fold_num)
+            y_pred_combined = np.concatenate(y_pred_combined,y_pred)
+            x_test_combined = np.concatenate(x_test_combined,test_x)
+            y_test_combined = np.concatenate(y_test_combined,test_y)
+            y_weights_combined = np.concatenate(y_weights_combined,test_weights)
     if mode == 'test':
         Metrics.print_metrics_for_all_folds()
+        count_POS(y_pred_combined, x_test_combined, y_test_combined, y_weights_combined)
     
 def main(unused_argv):
     if args.train_only and args.test_only: raise Exception('provide only one mode')

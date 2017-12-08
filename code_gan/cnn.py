@@ -3,7 +3,7 @@ import tensorflow as tf
 
 FLAGS = tf.app.flags.FLAGS
 
-def cnn(embeddings, keep_prob):
+def cnn(embeddings, keep_prob, mask=None):
     
     embeddings_expanded = tf.expand_dims(embeddings, -1)
     
@@ -25,6 +25,12 @@ def cnn(embeddings, keep_prob):
                     name="conv")
                 # Apply nonlinearity
                 h = tf.nn.relu(tf.nn.bias_add(conv, b), name="relu")
+                
+                # Apply mask to ignore padding
+                truncated_mask = tf.slice(mask, [0, 0], [-1, FLAGS.SEQUENCE_LEN - filter_size + 1])
+                truncated_mask = tf.expand_dims(tf.expand_dims(truncated_mask, -1), -1)
+                masked_h = truncated_mask * h
+                
                 # Maxpooling over the outputs
                 pooled = tf.nn.max_pool(
                     h,

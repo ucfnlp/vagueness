@@ -235,7 +235,7 @@ def train(model, train_x, train_y, val_x, val_y, fold_num):
                         for j in range(1):
                             batch_z = sample_Z([batch_x.shape[0], FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE])
                             g_batch_fake_c = sample_C(batch_x.shape[0])
-                            _, G_loss_curr, batch_samples, batch_probs, summary, logits, pure_logits  = model.run_G_train_step(
+                            _, G_loss_curr, batch_samples, batch_probs, summary, logits, pure_logits, inps  = model.run_G_train_step(
                                 sess, batch_z, g_batch_fake_c)
                     else:
                         summary = model.run_summary(sess) 
