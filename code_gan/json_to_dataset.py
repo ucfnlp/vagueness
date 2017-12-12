@@ -12,6 +12,7 @@ import h5py
 import gensim
 from gensim.models.word2vec import Word2Vec
 from numpy import nan_to_num
+import argparse
 
 numpy.random.seed(123)
 from keras.preprocessing.text import Tokenizer
@@ -22,19 +23,12 @@ float_type = numpy.float32
 # import theano
 # float_type = theano.config.floatX
 
-train_file = '../data/Privacy_Sentences.txt'
-word_id_file = '../data/train.h5'
-dict_file = '../data/words.dict'
-embedding_file = '../data/GoogleNews-vectors-negative300.bin'
-vague_file = '../data/vague_terms'
-dataset_file = '../data/annotated_dataset.h5'
-embedding_weights_file = '../data/annotated_embedding_weights.h5'
-clean_data_json = '../data/clean_data.json'
-vague_phrases_file = '../data/vague_phrases.txt'
-sentence_level_figure_file = '../data/sentence_level_distribution.png'
-
+parser = argparse.ArgumentParser()
+parser.add_argument('--VOCAB_SIZE', default=5000, type=int,
+                            help='Number of words in the vocabulary.')
+args = parser.parse_args()
  
-vocab_size = 10000
+vocab_size = args.VOCAB_SIZE
 embedding_dim = 300
 maxlen = 50
 batch_size = 128
@@ -45,6 +39,18 @@ validation_ratio = 0.1
 vague_phrase_threshold = 2
 min_vague_score = 1
 max_vague_score = 5
+
+train_file = '../data/Privacy_Sentences.txt'
+word_id_file = '../data/train.h5'
+dict_file = '../data/words.dict'
+embedding_file = '../data/GoogleNews-vectors-negative300.bin'
+vague_file = '../data/vague_terms'
+dataset_file = '../data/annotated_dataset_' + str(vocab_size) + '.h5'
+# embedding_weights_file = '../data/annotated_embedding_weights_' + str(vocab_size) + '.h5'
+clean_data_json = '../data/clean_data.json'
+vague_phrases_file = '../data/vague_phrases.txt'
+sentence_level_figure_file = '../data/sentence_level_distribution.png'
+
 
 '''
 Parameters

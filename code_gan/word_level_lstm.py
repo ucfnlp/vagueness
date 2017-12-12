@@ -280,18 +280,35 @@ def count_POS(y_pred, test_x, test_y, test_weights):
     FN = np.logical_and(y_pred == 0, test_y == 1)
     FN = np.logical_and(FN, test_weights)
     
-    pos_counts_clear = Counter([])
-    pos_counts_vague = Counter([])
+    FP_counts = Counter()
+    FN_counts = Counter()
+    
     for sent_idx, cur_sent in enumerate(test_x):
         cur_predict = y_pred[sent_idx]
         words = np.array([ d[id] for id in cur_sent])
 #             print(text)
         posTagged = pos_tag(words)
         tags = [item[1] for item in posTagged]
-        vague_words = [word for word_idx, word in enumerate(words) if cur_predict[word_idx] == 0]
-        clear_words = [word for word_idx, word in enumerate(words) if cur_predict[word_idx] == 1]
-        counts = Counter(tags)
-        pos_counts = pos_counts + counts
+        simplified_tags = [map_tag('en-ptb', 'universal', tag) for tag in tags]
+        for word_idx, tag in enumerate(tags):
+            if test_weights[sent_idx, word_idx] != 0:
+                if y_pred[sent_idx, word_idx] == 1 and test_y[sent_idx, word_idx] == 0:
+                    if tag == 'NNP':
+                        FP_counts[tag] += 1
+                    else:
+                        simplified_tag = simplified_tags[word_idx]
+                        FP_counts[simplified_tag] += 1
+                elif y_pred[sent_idx, word_idx] == 0 and test_y[sent_idx, word_idx] == 1:
+                    if tag == 'NNP':
+                        FN_counts[tag] += 1
+                    else:
+                        simplified_tag = simplified_tags[word_idx]
+                        FN_counts[simplified_tag] += 1
+    
+    FP_percent = [(i, 1.0*FP_counts[i] / sum(FP_counts.values()) * 100.0) for i in FP_counts]
+    FN_percent = [(i, 1.0*FN_counts[i] / sum(FN_counts.values()) * 100.0) for i in FN_counts]
+    
+    return FP_counts, FN_counts, FP_percent, FN_percent
     
     
         
@@ -310,13 +327,25 @@ def run_in_mode(mode, one_fold):
             train(train_x, train_y, train_weights, val_x, val_y, val_weights, fold_num)
         else:
             y_pred = test(test_x, test_y, test_weights, fold_num)
-            y_pred_combined = np.concatenate(y_pred_combined,y_pred)
-            x_test_combined = np.concatenate(x_test_combined,test_x)
-            y_test_combined = np.concatenate(y_test_combined,test_y)
-            y_weights_combined = np.concatenate(y_weights_combined,test_weights)
+            y_pred_combined = np.concatenate([y_pred_combined,y_pred])
+            x_test_combined = np.concatenate([x_test_combined,test_x])
+            y_test_combined = np.concatenate([y_test_combined,test_y])
+            y_weights_combined = np.concatenate([y_weights_combined,test_weights])
     if mode == 'test':
         Metrics.print_metrics_for_all_folds()
-        count_POS(y_pred_combined, x_test_combined, y_test_combined, y_weights_combined)
+        FP_counts, FN_counts, FP_percent, FN_percent = count_POS(y_pred_combined, x_test_combined, y_test_combined, y_weights_combined)
+        print ('POS tags for False Positives: ')
+        for key, value in FP_counts.items():
+            print(key, value)
+        print ('POS tags for False Negatives: ')
+        for key, value in FN_counts.items():
+            print(key, value)
+        print ('POS tags percentages for False Positives: ')
+        for key, value in FP_percent:
+            print(key, value)
+        print ('POS tags percentages for False Negatives: ')
+        for key, value in FN_percent:
+            print(key, value)
     
 def main(unused_argv):
     if args.train_only and args.test_only: raise Exception('provide only one mode')

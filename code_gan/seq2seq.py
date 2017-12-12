@@ -88,7 +88,6 @@ def _extract_argmax_and_embed(embedding,
                               update_embedding=True,
                               vague_weights=None,
                               fixed_embedding=None,
-                              vocab_noise_std_dev=None,
                               gumbel=None,
                               gumbel_mu=None,
                               gumbel_sigma=None):
@@ -113,12 +112,10 @@ def _extract_argmax_and_embed(embedding,
     pure_prev = prev
     if vague_weights is not None:
       prev = tf.add(prev, vague_weights)
-#     if vocab_noise_std_dev is not None:
-#       prev = utils.gaussian_noise_layer(prev, std=vocab_noise_std_dev)
     if gumbel is not None:
       g = unstacked_gumbel[i]
-#       prev = prev + gumbel_mu + (g*gumbel_sigma)
-      prev = prev + g
+    prev = prev + gumbel_mu + (g*gumbel_sigma)
+#       prev = prev + g
     probabilities = tf.nn.softmax(prev)
     prev_symbol = math_ops.argmax(prev, 1)
     # Note that gradients will not propagate through the second parameter of
@@ -129,57 +126,12 @@ def _extract_argmax_and_embed(embedding,
     return emb_prev, prev_symbol, probabilities, prev, pure_prev
 
   return loop_function
-  
-def _extract_sample_from_distribution_and_embed(embedding,
-                              output_projection=None,
-                              update_embedding=True,
-                              vague_weights=None,
-                              vocab_noise_std_dev=None):
-  """Get a loop_function that randomly chooses a symbol from the previous 
-  distribution and embeds it.
-
-  Args:
-    embedding: embedding tensor for symbols.
-    output_projection: None or a pair (W, B). If provided, each fed previous
-      output will first be multiplied by W and added B.
-    update_embedding: Boolean; if False, the gradients will not propagate
-      through the embeddings.
-
-  Returns:
-    A loop function.
-  """
-
-  def loop_function(prev, _):
-    if output_projection is not None:
-      prev = nn_ops.xw_plus_b(prev, output_projection[0], output_projection[1])
-#     log_probabilities = tf.log(prev)
-    if vague_weights is not None:
-      prev = tf.add(prev, vague_weights)
-    if vocab_noise_std_dev is not None:
-      prev = utils.gaussian_noise_layer(prev, std=vocab_noise_std_dev)
-    probabilities = tf.nn.softmax(prev)
-    log_probabilities = tf.log(probabilities)
-    prev_symbol = tf.multinomial(log_probabilities, 1, name='sample')
-    prev_symbol = tf.reshape(prev_symbol, [-1])
-#     prev_symbol = math_ops.argmax(prev, 1)
-    # Note that gradients will not propagate through the second parameter of
-    # embedding_lookup.
-    emb_prev = embedding_ops.embedding_lookup(embedding, prev_symbol)
-    if not update_embedding:
-      emb_prev = array_ops.stop_gradient(emb_prev)
-    return emb_prev, prev_symbol, probabilities, prev
-
-  return loop_function
 
 def rnn_decoder(decoder_inputs,
                 initial_state,
                 cell,
                 loop_function=None,
-                scope=None,
-                sample_from_distribution=False,
-                class_embedding=None,
-                hidden_noise_std_dev=None,
-                vocab_noise_std_dev=None):
+                scope=None):
   """RNN decoder for the sequence-to-sequence model.
 
   Args:
@@ -225,8 +177,6 @@ def rnn_decoder(decoder_inputs,
           inps.append(inp)
       if i > 0:
         variable_scope.get_variable_scope().reuse_variables()
-#       if hidden_noise_std_dev is not None:
-#         state = utils.gaussian_noise_layer(state, std=hidden_noise_std_dev)
       output, state = cell(inp, state)
       outputs.append(output)
       if loop_function is not None:
@@ -323,13 +273,9 @@ def embedding_rnn_decoder(decoder_inputs,
                           feed_previous=False,
                           update_embedding_for_previous=True,
                           scope=None,
-                          sample_from_distribution=False,
-                          class_embedding=None,
                           vague_weights=None,
                           embedding_matrix=None,
                           fixed_embedding=None,
-                          hidden_noise_std_dev=None,
-                          vocab_noise_std_dev=None,
                           gumbel=None,
                           gumbel_mu=None,
                           gumbel_sigma=None):
@@ -392,22 +338,14 @@ def embedding_rnn_decoder(decoder_inputs,
     else:
         embedding = variable_scope.get_variable("embedding",
                                             [num_symbols, embedding_size])
-    if sample_from_distribution:
-        loop_function = _extract_sample_from_distribution_and_embed(
-            embedding, output_projection, 
-            update_embedding_for_previous, vague_weights,
-            vocab_noise_std_dev) if feed_previous else None
-    else:
-        loop_function = _extract_argmax_and_embed(
-            embedding, output_projection,
-            update_embedding_for_previous, vague_weights, fixed_embedding,
-            vocab_noise_std_dev, gumbel, gumbel_mu, gumbel_sigma) if feed_previous else None
+    loop_function = _extract_argmax_and_embed(
+        embedding, output_projection,
+        update_embedding_for_previous, vague_weights, fixed_embedding,
+        gumbel, gumbel_mu, gumbel_sigma) if feed_previous else None
     emb_inp = (embedding_ops.embedding_lookup(embedding, i)
                for i in decoder_inputs)
     return rnn_decoder(
-        emb_inp, initial_state, cell, loop_function=loop_function, 
-        sample_from_distribution=sample_from_distribution, class_embedding=class_embedding,
-        hidden_noise_std_dev=hidden_noise_std_dev)
+        emb_inp, initial_state, cell, loop_function=loop_function)
 
 
 def embedding_rnn_seq2seq(encoder_inputs,
@@ -715,7 +653,7 @@ def attention_decoder(decoder_inputs,
   if num_heads < 1:
     raise ValueError("With less than 1 heads, use a non-attention decoder.")
   if attention_states.get_shape()[2].value is None:
-    raise ValueError("Shape[2] of attention_states must be known: %s" %
+    raise ValueError("Shape[2] of attention_states must be known: %s" % 
                      attention_states.get_shape())
   if output_size is None:
     output_size = cell.output_size

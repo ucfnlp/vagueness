@@ -16,7 +16,7 @@ class ACGANModel(object):
         self.params = params
         self.is_built = False
         
-    def run_D_train_step(self, sess, batch_x, batch_c, z, batch_fake_c):
+    def run_D_train_step(self, sess, batch_x, batch_c, z, batch_fake_c, batch_weights=None):
         to_return = [self.D_solver, self.D_loss, self.D_real_acc, self.D_fake_acc, 
             self.D_real_class_acc, self.D_fake_class_acc, self.D_loss_real, 
             self.D_loss_fake, self.D_loss_class_real, self.D_loss_class_fake]
@@ -25,28 +25,31 @@ class ACGANModel(object):
                                self.real_c: batch_c,
                                self.fake_c: batch_fake_c,
                                self.z: z,
-                               self.keep_prob: FLAGS.KEEP_PROB})
+                               self.keep_prob: FLAGS.KEEP_PROB,
+                               self.real_weights: batch_weights})
     
     def run_G_train_step(self, sess, z, batch_fake_c):
         to_return = [self.G_solver, self.G_loss, self.samples, self.probs, self.merged, 
-                     self.logits, self.pure_logits, self.inps]
+                     self.logits, self.pure_logits, self.inps, self.outputs]
         return sess.run(to_return,
                     feed_dict={self.fake_c: batch_fake_c,
                                self.z: z,
                                self.keep_prob: FLAGS.KEEP_PROB})
         
-    def run_test(self, sess, batch_x):
+    def run_test(self, sess, batch_x, batch_weights):
         to_return = self.D_class_logit_real
         return sess.run(to_return,
                         feed_dict={self.real_x: batch_x,
-                               self.keep_prob: 1})
+                               self.keep_prob: 1,
+                               self.real_weights: batch_weights})
         
-    def run_val(self, sess, batch_x, batch_y):
+    def run_val(self, sess, batch_x, batch_y, batch_weights):
         to_return = self.D_loss_class_real
         return sess.run(to_return,
                     feed_dict={self.real_x: batch_x,
                                self.real_c: batch_y,
-                               self.keep_prob: 1})
+                               self.keep_prob: 1,
+                               self.real_weights: batch_weights})
         
     def run_samples(self, sess, batch_fake_c, batch_z):
         return sess.run(self.samples, feed_dict={self.fake_c: batch_fake_c,
@@ -69,11 +72,10 @@ class ACGANModel(object):
         self.global_step.assign(value).eval()
         
     def _add_placeholder(self):
-        if FLAGS.SAMPLE:
-            self.real_x = tf.placeholder(tf.int32, shape=[None, FLAGS.SEQUENCE_LEN])
-        else:
-            self.real_x = tf.placeholder(tf.float32, shape=[None, FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE])
+        self.real_x = tf.placeholder(tf.int32, shape=[None, FLAGS.SEQUENCE_LEN])
+#             self.real_x = tf.placeholder(tf.float32, shape=[None, FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE])
         self.real_c = tf.placeholder(tf.int32, [None,], 'class')
+        self.real_weights = tf.placeholder(tf.float32, shape=[None, FLAGS.SEQUENCE_LEN])
         self.fake_c = tf.placeholder(tf.int32, [None,], 'class')
         self.z = tf.placeholder(tf.float32, [None, FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE], name='z')
         
@@ -84,21 +86,21 @@ class ACGANModel(object):
         self.gumbel_mu = tf.get_variable(name='gumbel_mu', initializer=tf.constant(0.), trainable=False)
         self.gumbel_sigma = tf.get_variable(name='gumbel_sigma', initializer=tf.constant(1.), trainable=False)
         self.keep_prob = tf.placeholder(tf.float32)
+        self.real_x_emb = tf.nn.embedding_lookup(self.embedding_matrix, self.real_x)
+        self.real_EOS_idx = utils.get_EOS_idx(self.real_x)
         
     def _add_acgan(self):
         with tf.variable_scope(tf.get_variable_scope()) as scope:
-            self.G_sample, self.samples, self.probs, self.u, self.m, self.logits, self.pure_logits, self.vague_weights, self.inps = generator(self.z, self.fake_c, self.vague_terms,
+            self.G_sample, self.samples, self.probs, self.fake_EOS_idx, self.logits, self.pure_logits, self.vague_weights, self.inps, self.fake_weights, self.outputs, self.fake_x_emb = generator(
+                 self.z, self.fake_c, self.vague_terms,
                  self.embedding_matrix, self.keep_prob, self.gumbel_mu, self.gumbel_sigma) #TODO move to generator
-            self.D_real, self.D_logit_real, self.D_class_logit_real = discriminator(self.real_x, 
-                 self.embedding_matrix, self.keep_prob)
+            self.D_real, self.D_logit_real, self.D_class_logit_real = discriminator(self.real_x_emb, 
+                 self.embedding_matrix, self.keep_prob, self.real_EOS_idx)
             tf.get_variable_scope().reuse_variables()
-            if FLAGS.SAMPLE:
-                self.D_fake, self.D_logit_fake, self.D_class_logit_fake = discriminator(self.samples,
-                     self.embedding_matrix, self.keep_prob)
-            else:
-                self.D_fake, self.D_logit_fake, self.D_class_logit_fake = discriminator(self.G_sample,
-                     self.embedding_matrix, self.keep_prob)
-        a=0
+            self.D_fake, self.D_logit_fake, self.D_class_logit_fake = discriminator(self.fake_x_emb,
+                self.embedding_matrix, self.keep_prob, self.fake_EOS_idx)
+            if not FLAGS.TRAIN_GENERATOR:
+                self.D_fake, self.D_logit_fake, self.D_class_logit_fake = [0,0,0]
         
     def _add_loss(self):
         self.D_real_acc = tf.cast(utils.tf_count(tf.round(self.D_real), 1), tf.float32) / tf.cast(
@@ -138,8 +140,9 @@ class ACGANModel(object):
         tvars   = tf.trainable_variables() 
         theta_D = [var for var in tvars if 'D_' in var.name]
         theta_G = [var for var in tvars if 'G_' in var.name]
-#         theta_D.append(self.embedding_matrix)
-#         theta_G.append(self.embedding_matrix)
+        if FLAGS.TRAIN_EMBEDDING:
+            theta_D.append(self.embedding_matrix)
+            theta_G.append(self.embedding_matrix)
         D_lossL2 = tf.add_n([ tf.nn.l2_loss(v) for v in theta_D if 'bias' not in v.name ]) * FLAGS.L2_LAMBDA
         G_lossL2 = tf.add_n([ tf.nn.l2_loss(v) for v in theta_G if 'bias' not in v.name ]) * FLAGS.L2_LAMBDA
         self.D_loss += D_lossL2
@@ -154,16 +157,12 @@ class ACGANModel(object):
         else:
             gan_params = param_names.GAN_PARAMS
         for pair in gan_params.VARIABLE_PAIRS:
-            append = False
-        #     if pair[1] == param_names.GEN_GRU_GATES_WEIGHTS or pair[1] == param_names.GEN_GRU_CANDIDATE_WEIGHTS:
-        #         append = True
-            self.assign_ops.append(utils.assign_variable_op(self.params, pair[0], pair[1], append=append))
+            self.assign_ops.append(utils.assign_variable_op(self.params, pair[0], pair[1]))
         
     def _add_optimizer(self):
         tvars = tf.trainable_variables()
         theta_D = [var for var in tvars if 'D_' in var.name]
         theta_G = [var for var in tvars if 'G_' in var.name]
-#         theta_G = [var for var in tvars if 'G_' in var.name or 'D_' in var.name]
         if FLAGS.TRAIN_EMBEDDING:
             theta_D.append(self.embedding_matrix)
             theta_G.append(self.embedding_matrix)

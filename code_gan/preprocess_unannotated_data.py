@@ -10,6 +10,7 @@ import gensim
 from gensim.models import KeyedVectors
 import cPickle
 import yaml
+import argparse
 
 numpy.random.seed(123)
 from keras.preprocessing.text import Tokenizer
@@ -17,21 +18,26 @@ from keras.preprocessing.sequence import pad_sequences
 
 data_folder = '../data/'
 
-train_file = data_folder + 'Privacy_Sentences.txt'
-word_id_file = data_folder + 'train.h5'
-dict_file = data_folder + 'words.dict'
-embedding_file = data_folder + 'GoogleNews-vectors-negative300.bin'
-vague_file = data_folder + 'vague_terms'
-dataset_file = data_folder + 'dataset.h5'
-embedding_weights_file = data_folder + 'embedding_weights.h5'
-annotated_file = data_folder + 'clean_data.json'
+parser = argparse.ArgumentParser()
+parser.add_argument('--VOCAB_SIZE', default=10000, type=int,
+                            help='Number of words in the vocabulary.')
+args = parser.parse_args()
  
-vocab_size = 10000
+vocab_size = args.VOCAB_SIZE
 embedding_dim = 300
 maxlen = 50
 batch_size = 128
 val_samples = batch_size * 10
 train_ratio = 0.8
+
+train_file = data_folder + 'Privacy_Sentences.txt'
+word_id_file = data_folder + 'train.h5'
+dict_file = data_folder + 'words.dict'
+embedding_file = data_folder + 'GoogleNews-vectors-negative300.bin'
+vague_file = data_folder + 'vague_terms'
+dataset_file = data_folder + 'dataset_' + str(vocab_size) + '.h5'
+embedding_weights_file = data_folder + 'embedding_weights_' + str(vocab_size) + '.h5'
+annotated_file = data_folder + 'clean_data.json'
 
 # load file, one sentence per line
 sentences = []

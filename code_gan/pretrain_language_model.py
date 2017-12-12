@@ -8,51 +8,72 @@ import h5py
 from tensorflow.contrib.rnn import BasicRNNCell, BasicLSTMCell, GRUCell
 import utils
 import load
+import param_names
 import argparse
 import os
+from tqdm import tqdm
 
-ckpt_dir = '../models/lm_ckpts_l2'
-variables_file = ckpt_dir + '/tf_lm_variables.npz'
+models_folder = '../models'
+default_model_name = 'lm_ckpts_l2'
 dataset_file = '../data/dataset.h5'
+summary_file = os.path.join('/home','logan','tensorboard')
 fast = False
 
 FLAGS = tf.app.flags.FLAGS
-tf.app.flags.DEFINE_integer('EPOCHS', 20,
-                            'Num epochs.')
-tf.app.flags.DEFINE_integer('VOCAB_SIZE', 10000,
-                            'Number of words in the vocabulary.')
-tf.app.flags.DEFINE_integer('LATENT_SIZE', 512,
-                            'Size of both the hidden state of RNN and random vector z.')
-tf.app.flags.DEFINE_integer('SEQUENCE_LEN', 50,
-                            'Max length for each sentence.')
-tf.app.flags.DEFINE_integer('EMBEDDING_SIZE', 300,
-                            'Max length for each sentence.')
-tf.app.flags.DEFINE_integer('PATIENCE', 200,
-                            'Max length for each sentence.')
-tf.app.flags.DEFINE_integer('BATCH_SIZE', 64,
-                            'Max length for each sentence.')
-tf.app.flags.DEFINE_string('CELL_TYPE', 'LSTM',
-                            'Which RNN cell for the RNNs.')
-tf.app.flags.DEFINE_integer('RANDOM_SEED', 123,
-                            'Random seed used for numpy and tensorflow (dropout, sampling)')
-tf.app.flags.DEFINE_float('L2_LAMBDA', 1e-6,
-                            'L2 regularization lambda parameter')
-tf.set_random_seed(FLAGS.RANDOM_SEED)
-np.random.seed(FLAGS.RANDOM_SEED)
-
-
 parser = argparse.ArgumentParser()
+parser.add_argument('--EPOCHS', default=20, type=int,
+                            help='Num epochs.')
+parser.add_argument('--VOCAB_SIZE', default=10000, type=int,
+                            help='Number of words in the vocabulary.')
+parser.add_argument('--LATENT_SIZE', default=512, type=int,
+                            help='Size of both the hidden state of RNN and random vector z.')
+parser.add_argument('--SEQUENCE_LEN', default=50, type=int,
+                            help='Max length for each sentence.')
+parser.add_argument('--EMBEDDING_SIZE', default=300, type=int,
+                            help='Max length for each sentence.')
+parser.add_argument('--PATIENCE', default=200, type=int,
+                            help='Max length for each sentence.')
+parser.add_argument('--BATCH_SIZE', default=64, type=int,
+                            help='Max length for each sentence.')
+parser.add_argument('--NUM_CLASSES', default=4, type=int,
+                            help='Max length for each sentence.')
+parser.add_argument('--CELL_TYPE', default='LSTM', type=str,
+                            help='Which RNN cell for the RNNs.')
+parser.add_argument('--RANDOM_SEED', default=123, type=int,
+                            help='Random seed used for numpy and tensorflow (dropout, sampling)')
+parser.add_argument('--L2_LAMBDA', default=1e-4, type=float,
+                            help='L2 regularization lambda parameter')
+parser.add_argument('--KEEP_PROB', default=1, type=float,
+                            help='Dropout probability of keeping a node')
 parser.add_argument("--fast", help="run in fast mode for testing",
                     action="store_true")
 parser.add_argument("--resume", help="resume from last saved epoch",
                     action="store_true")
+parser.add_argument('--name', default=default_model_name, help='Optional name of model, and affects where to save model') 
 args = parser.parse_args()
+
+for arg_name, arg_value in vars(args).iteritems():
+    if type(arg_value) == bool:
+        tf.app.flags.DEFINE_boolean(arg_name, arg_value, docstring='')
+    elif type(arg_value) == int:
+        tf.app.flags.DEFINE_integer(arg_name, arg_value, docstring='')
+    elif type(arg_value) == float:
+        tf.app.flags.DEFINE_float(arg_name, arg_value, docstring='')
+    elif type(arg_value) == str:
+        tf.app.flags.DEFINE_string(arg_name, arg_value, docstring='')
+
+tf.set_random_seed(FLAGS.RANDOM_SEED)
+np.random.seed(FLAGS.RANDOM_SEED)
+
  
 if args.fast or fast:
     FLAGS.EPOCHS = 2
 
+ckpt_dir = os.path.join(models_folder, args.name)
 if not os.path.exists(ckpt_dir):
     os.makedirs(ckpt_dir)
+    
+variables_file = ckpt_dir + '/tf_lm_variables.npz'
     
 embedding_weights = load.load_embedding_weights()
 d, word_to_id = load.load_dictionary()
@@ -76,7 +97,7 @@ outputs, state = tf.contrib.rnn.static_rnn(
 
 # is this right?
 output = tf.reshape(tf.stack(axis=1, values=outputs), [-1, FLAGS.LATENT_SIZE])
-# output = tf.nn.dropout(output, 0.5)
+output = tf.nn.dropout(output, FLAGS.KEEP_PROB)
 
 logits = tf.layers.dense(output, FLAGS.VOCAB_SIZE)
 logits = tf.reshape(logits, [-1, FLAGS.SEQUENCE_LEN, FLAGS.VOCAB_SIZE])
@@ -99,6 +120,8 @@ total = tf.reduce_sum(weights)
 correct_predictions = tf.logical_and(tf.equal(predictions, targets), tf.cast(weights, tf.bool))
 accuracy = tf.reduce_sum(tf.cast(correct_predictions, "float"))/total
 
+utils.variable_summaries(tvars) 
+merged = tf.summary.merge_all()
 
 global_step = tf.Variable(-1, name='global_step', trainable=False)
 saver = tf.train.Saver()
@@ -122,7 +145,7 @@ with tf.Session() as sess:
 #     saver = tf.train.Saver(var_list=tf.trainable_variables())
     tf.add_to_collection('inputs', inputs)
     tf.add_to_collection('predictions', predictions)
-#     train_writer = tf.summary.FileWriter(summary_file + '/train', sess.graph)
+    train_writer = tf.summary.FileWriter(os.path.join(summary_file, FLAGS.name), sess.graph)
     tf.global_variables_initializer().run()
     if args.resume:
         ckpt = tf.train.get_checkpoint_state(ckpt_dir)
@@ -133,9 +156,10 @@ with tf.Session() as sess:
     start = global_step.eval() + 1 # get last global_step and start the next one
     print "Start from:", start
         
-    for cur_epoch in range(start, FLAGS.EPOCHS):
-        for batch_x, batch_y, batch_weights, cur, data_len in batch_generator(train_X, train_Y, train_weights):
-            batch_cost, batch_accuracy, batch_logits, _ = sess.run([cost, accuracy, logits, optimizer], 
+    step = 0
+    for cur_epoch in tqdm(range(start, FLAGS.EPOCHS), desc='Epoch', total=FLAGS.EPOCHS-start):
+        for batch_x, batch_y, batch_weights, cur, data_len in tqdm(batch_generator(train_X, train_Y, train_weights), desc='Batch', total=len(train_Y)/FLAGS.BATCH_SIZE):
+            batch_cost, batch_accuracy, batch_logits, _, summary = sess.run([cost, accuracy, logits, optimizer, merged], 
                                          feed_dict={inputs:batch_x, targets:batch_y, weights:batch_weights})
             
             test_batch_x = test_X[:FLAGS.BATCH_SIZE]
@@ -164,12 +188,23 @@ with tf.Session() as sess:
             print('Loss ', batch_cost)
             print('Accuracy ', batch_accuracy)
             
+            projection_w = utils.eval_variable(param_names.TRAIN_OUTPUT_WEIGHTS)
+            projection_b = utils.eval_variable(param_names.TRAIN_OUTPUT_BIASES)
+            emb = utils.eval_variable(param_names.TRAIN_EMBEDDING)
+            out = 'Proj W: {:.6}\t'.format(np.mean(np.absolute(projection_w)))
+            out += 'Proj B: {:.6}\t'.format(np.mean(np.absolute(projection_b)))
+            out += 'Emb: {:.6}\t'.format(np.mean(np.absolute(emb)))
+            tqdm.write(out)
+            
         print 'saving model to file:'
         global_step.assign(cur_epoch).eval() # set and update(eval) global_step with index, i
         saver.save(sess, ckpt_dir + "/model.ckpt", global_step=global_step)
         vars = sess.run(tvars)
         variables = dict(zip(tvar_names, vars))
         np.savez(variables_file, **variables)
+        
+        train_writer.add_summary(summary, step)
+        step += 1
         
 
 print('done')

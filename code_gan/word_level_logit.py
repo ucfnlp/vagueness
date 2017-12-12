@@ -347,12 +347,7 @@ def test(test_x, test_y, fold_num):
             print ckpt.model_checkpoint_path
             saver.restore(sess, ckpt.model_checkpoint_path)  # restore all variables
         total_predictions, _ = predict(sess, test_x, test_y)
-        Metrics.print_metrics(test_y, total_predictions)
-    id_to_vague = {}
-    for i, id in enumerate(test_x):
-        id_to_vague[id] = total_predictions[i]
-    id_to_vague[0] = 0
-    return id_to_vague
+        Metrics.print_and_save_metrics(test_y, total_predictions)
         
         
 
@@ -366,10 +361,10 @@ def run_on_fold(mode, fold_num):
         y = np.concatenate([train_y_word, val_y_word, test_y_word])
         print(x.shape)
 #         id_to_vague = test(test_x_word, test_y_word, fold_num)
-        id_to_vague = test(x, y, fold_num)
-        print('0s ', id_to_vague.values().count(0))
-        print('1s ', id_to_vague.values().count(1))
-        print('total', len(id_to_vague.values()))
+        test(x, y, fold_num)
+        print('0s ', np.sum(y == 0))
+        print('1s ', np.sum(y == 1))
+        print('total', np.size(y))
 #         predict_on_sentences(test_x, test_y, test_weights, id_to_vague, fold_num)
         
         

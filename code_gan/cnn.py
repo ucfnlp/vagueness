@@ -3,7 +3,7 @@ import tensorflow as tf
 
 FLAGS = tf.app.flags.FLAGS
 
-def cnn(embeddings, keep_prob, mask=None):
+def cnn(embeddings, keep_prob, EOS_idx=None):
     
     embeddings_expanded = tf.expand_dims(embeddings, -1)
     
@@ -27,6 +27,8 @@ def cnn(embeddings, keep_prob, mask=None):
                 h = tf.nn.relu(tf.nn.bias_add(conv, b), name="relu")
                 
                 # Apply mask to ignore padding
+                amount_to_add_back = 1 if FLAGS.MASK_OUT_EOS_SYMBOL else 2  # This just makes the masked section to be the right length
+                mask = tf.sequence_mask(EOS_idx - filter_size + amount_to_add_back, FLAGS.SEQUENCE_LEN, dtype=tf.float32)
                 truncated_mask = tf.slice(mask, [0, 0], [-1, FLAGS.SEQUENCE_LEN - filter_size + 1])
                 truncated_mask = tf.expand_dims(tf.expand_dims(truncated_mask, -1), -1)
                 masked_h = truncated_mask * h

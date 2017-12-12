@@ -11,8 +11,10 @@ import param_names
 import load
 import argparse
 from tqdm import tqdm
+import os
 
-train_variables_file = '../models/lm_ckpts_l2/tf_lm_variables.npz'
+models_folder = os.path.join('..','models')
+default_model_name = 'lm_ckpts_l2'
 dataset_file = '../data/dataset.h5'
 embedding_weights_file = '../data/embedding_weights.h5'
 dictionary_file = '../data/words.dict'
@@ -21,6 +23,11 @@ output_sentences_file = '../data/generated_dataset_words.txt'
 annotated_dataset_file = '../data/annotated_dataset.h5'
 start_symbol_index = 2
 validation_ratio = 0.1
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--name', default=default_model_name,
+                     help='Optional name of model, and affects where to save model') 
+args = parser.parse_args()
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_integer('EPOCHS', 20,
@@ -35,7 +42,7 @@ tf.app.flags.DEFINE_integer('EMBEDDING_SIZE', 300,
                             'Max length for each sentence.')
 tf.app.flags.DEFINE_integer('PATIENCE', 200,
                             'Max length for each sentence.')
-tf.app.flags.DEFINE_integer('BATCH_SIZE', 1000,
+tf.app.flags.DEFINE_integer('BATCH_SIZE', 100,
                             'Max length for each sentence.')
 tf.app.flags.DEFINE_integer('NUM_CLASSES', 4,
                             'Number of classes for sentence classification.')
@@ -43,8 +50,6 @@ tf.app.flags.DEFINE_integer('NUM_OUTPUT_SENTENCES', 100000,
                             'How many instances should be generated.')
 tf.app.flags.DEFINE_string('CELL_TYPE', 'LSTM',
                             'Which RNN cell for the RNNs.')
-tf.app.flags.DEFINE_boolean('SAMPLE', False,
-                            'Whether to sample from the generator distribution to get fake samples.')
 # tf.app.flags.DEFINE_float('HIDDEN_NOISE_STD_DEV', 0, #0.05
 #                             'Standard deviation for the gaussian noise added to each time '
 #                             + 'step\'s hidden state. To turn off, set = 0')
@@ -60,7 +65,7 @@ np.random.seed(FLAGS.RANDOM_SEED)
 
     
 print('loading model parameters')
-params = np.load(train_variables_file)
+params = np.load(os.path.join(models_folder, args.name, 'tf_lm_variables.npz'))
 # print (params.keys())
 embedding_weights = load.load_embedding_weights()
     
@@ -106,7 +111,7 @@ def sample_C(m):
 W = tf.Variable(tf.random_normal([FLAGS.LATENT_SIZE, FLAGS.VOCAB_SIZE]), name='W')    
 b = tf.Variable(tf.random_normal([FLAGS.VOCAB_SIZE]), name='b')    
 initial_state = tf.contrib.rnn.LSTMStateTuple(tf.zeros([dims[0], FLAGS.LATENT_SIZE]), tf.zeros([dims[0], FLAGS.LATENT_SIZE]))
-outputs, states, samples, probs, logits, pure_logits = embedding_rnn_decoder(start_symbol_input,   # is this ok? I'm not sure what giving 0 inputs does (although it should be completely ignoring inputs)
+outputs, states, samples, probs, logits, pure_logits, inps = embedding_rnn_decoder(start_symbol_input,   # is this ok? I'm not sure what giving 0 inputs does (although it should be completely ignoring inputs)
                                   initial_state,
                                   cell,
                                   FLAGS.VOCAB_SIZE,
@@ -114,7 +119,6 @@ outputs, states, samples, probs, logits, pure_logits = embedding_rnn_decoder(sta
                                   output_projection=(W,b),
                                   feed_previous=True,
                                   update_embedding_for_previous=True,
-                                  sample_from_distribution=FLAGS.SAMPLE,
                                   vague_weights=vague_weights,
 #                                   embedding_matrix=embedding_matrix,
                                   hidden_noise_std_dev=None,

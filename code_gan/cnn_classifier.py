@@ -97,12 +97,15 @@ print('building model')
 filter_sizes = list(map(int, FLAGS.FILTER_SIZES.split(",")))
 num_filters_total = FLAGS.NUM_FILTERS * len(filter_sizes)
 keep_prob = tf.placeholder(tf.float32, name='keep_prob')
+
 inputs = tf.placeholder(tf.int32, shape=(None, FLAGS.SEQUENCE_LEN), name='inputs')
 targets = tf.placeholder(tf.int32, shape=(None,), name='targets')
 weights = tf.placeholder(tf.float32, shape=(None, FLAGS.SEQUENCE_LEN), name='weights')
+
 embedding_tensor = tf.Variable(initial_value=embedding_weights, name='embedding_matrix')
 embeddings = tf.nn.embedding_lookup(embedding_tensor, inputs)
-pooled_outputs = cnn(embeddings, keep_prob, mask=weights)
+EOS_idx = utils.get_EOS_idx(inputs)
+pooled_outputs = cnn(embeddings, keep_prob, EOS_idx=EOS_idx)
 
 # Final (unnormalized) scores and predictions
 with tf.name_scope("output"):

@@ -42,12 +42,17 @@ def get_variable_by_name(name):
         raise Exception('Multiple variables found by name: ' + name)
     return list[0]
 
-def assign_variable_op(params, pretrained_name, cur_name, append=False): #TODO change becuase not using class embedding here
+def eval_variable(name):
+    var = get_variable_by_name(name)
+    return var.eval()
+
+def print_variable_names():
+    for var in tf.trainable_variables():
+        print(var.name)
+
+def assign_variable_op(params, pretrained_name, cur_name): #TODO change becuase not using class embedding here
     var = get_variable_by_name(cur_name)
     pretrained_value = params[pretrained_name]
-    if append:
-        extra_weights = np.random.normal(size=(FLAGS.CLASS_EMBEDDING_SIZE, pretrained_value.shape[1]))
-        pretrained_value = np.concatenate((pretrained_value, extra_weights), axis=0)
     return var.assign(pretrained_value)
 
 def tf_count(t, val):
@@ -68,6 +73,8 @@ def variable_summaries(vars):
         #     tf.summary.scalar('max ' + var.name, tf.reduce_max(var))
         #     tf.summary.scalar('min ' + var.name, tf.reduce_min(var))
         tf.summary.histogram(var.name + ' histogram', var)
+        absolute_value = tf.reduce_mean(tf.abs(var))
+        tf.summary.scalar(var.name + ' absolute_value', absolute_value)
     
 class Metrics:
     def __init__(self, is_binary=False):
@@ -164,8 +171,8 @@ def batch_generator(x, y, weights=None, batch_size=64, one_hot=False, actually_z
             x_batch_one_hot_reshaped = x_batch_one_hot.reshape([-1,FLAGS.SEQUENCE_LEN,FLAGS.VOCAB_SIZE])
             x_batch = x_batch_one_hot_reshaped
         y_batch = y[i:min(i+batch_size,data_len)]
-        weights_batch = weights[i:min(i+batch_size,data_len)]
         if weights is not None:
+            weights_batch = weights[i:min(i+batch_size,data_len)]
             yield x_batch, y_batch, weights_batch, i, data_len
         else:
             yield x_batch, y_batch, i, data_len
@@ -197,7 +204,14 @@ def clear_tensorboard(name):
     folder = os.path.join(tensorboard_dir, name)
     delete_contents(folder)
         
-        
+def get_EOS_idx(samples):
+    ''' Used for clipping all words after <eos> word '''
+    batch_size = tf.stack([tf.shape(samples)[0],])
+    eos = tf.fill(batch_size, 3)
+    eos = tf.reshape(eos, [-1, 1])
+    d=tf.concat([samples,eos],1)
+    EOS_idx=tf.cast(tf.argmax(tf.cast(tf.equal(d, 3), tf.int32), axis=1), tf.int32) + 1
+    return EOS_idx
         
         
         
