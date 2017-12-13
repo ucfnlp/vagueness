@@ -54,12 +54,8 @@ parser.add_argument('--BATCH_SIZE', default=64, type=int,
                             help='Max length for each sentence.')
 parser.add_argument('--NUM_CLASSES', default=4, type=int,
                             help='Max length for each sentence.')
-parser.add_argument('--CLASS_EMBEDDING_SIZE', default=1, type=int,
-                            help='Max length for each sentence.')
 parser.add_argument('--CELL_TYPE', default='LSTM', type=str,
                             help='Which RNN cell for the RNNs.')
-parser.add_argument('--MODE', default='TRAIN', type=str,
-                            help='Whether to run in train or test mode.')
 parser.add_argument('--RANDOM_SEED', default=123, type=int,
                             help='Random seed used for numpy and tensorflow (dropout, sampling)')
 parser.add_argument('--USE_CNN', default=True,
@@ -102,7 +98,12 @@ parser.add_argument('--MASK_OUT_EOS_SYMBOL', default=True, type=bool,
                             help='Whether to truncate all words after End Of Sentence symbol')
 parser.add_argument('--RANDOM_START_WORD_INSTEAD_OF_GUMBEL', default=False, type=bool,
                             help='Replaces start of sentence symbol with a random word, and turns off gumbel')
+parser.add_argument('--NUM_STEPS_GUMBEL', default=-1, type=int,
+                            help='How many time steps that Gumbel should be added to the distribution. -1 means all time steps.')
 args = parser.parse_args()
+
+if args.RANDOM_START_WORD_INSTEAD_OF_GUMBEL:
+    args.GUMBEL = False
 
 if args.VANILLA_GAN:
     args.SOURCE_LOSS_WEIGHT = 1.
@@ -304,6 +305,7 @@ def train(model, train_x, train_y, train_weights, val_x, val_y, val_weights, fol
                 break
             
         train_writer.close()
+        
     
 def test(model, test_x, test_y, test_weights, fold_num):
     print ('building graph')

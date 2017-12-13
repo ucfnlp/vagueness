@@ -13,7 +13,11 @@ def generator(z, c, initial_vague_terms, embedding_matrix, keep_prob, gumbel_mu,
         cell = utils.create_cell(keep_prob)
 #         cell = tf.contrib.rnn.DropoutWrapper(cell, output_keep_prob=0.5)
         dims = tf.stack([tf.shape(c)[0],])
-        start_symbol_input = [tf.fill(dims, start_symbol_index) for i in range(FLAGS.SEQUENCE_LEN)]
+        if FLAGS.RANDOM_START_WORD_INSTEAD_OF_GUMBEL:
+            start_symbol_input = [tf.random_uniform(dims, minval=1, maxval=FLAGS.VOCAB_SIZE, dtype=tf.int32, name='random_start_word') for i in range(FLAGS.SEQUENCE_LEN)]
+        else:
+            start_symbol_input = [tf.fill(dims, start_symbol_index) for i in range(FLAGS.SEQUENCE_LEN)]
+            
         initial_state = tf.contrib.rnn.LSTMStateTuple(tf.zeros([dims[0], FLAGS.LATENT_SIZE]), tf.zeros([dims[0], FLAGS.LATENT_SIZE]))
         gumbel_noise = z if FLAGS.GUMBEL else None
         weights = tf.get_variable("output_weights", shape=[FLAGS.LATENT_SIZE, FLAGS.VOCAB_SIZE],
@@ -44,7 +48,8 @@ def generator(z, c, initial_vague_terms, embedding_matrix, keep_prob, gumbel_mu,
                                   embedding_matrix=embedding_matrix,
                                   gumbel=gumbel_noise,
                                   gumbel_mu=gumbel_mu,
-                                  gumbel_sigma=gumbel_sigma)
+                                  gumbel_sigma=gumbel_sigma,
+                                  num_steps_gumbel=FLAGS.NUM_STEPS_GUMBEL)
 
         pure_logits = tf.stack(pure_logits, axis=1)
         logits = tf.stack(logits, axis=1)

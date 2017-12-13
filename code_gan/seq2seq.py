@@ -90,7 +90,8 @@ def _extract_argmax_and_embed(embedding,
                               fixed_embedding=None,
                               gumbel=None,
                               gumbel_mu=None,
-                              gumbel_sigma=None):
+                              gumbel_sigma=None,
+                              num_steps_gumbel=-1):
   """Get a loop_function that extracts the previous symbol and embeds it.
 
   Args:
@@ -113,9 +114,10 @@ def _extract_argmax_and_embed(embedding,
     if vague_weights is not None:
       prev = tf.add(prev, vague_weights)
     if gumbel is not None:
-      g = unstacked_gumbel[i]
-    prev = prev + gumbel_mu + (g*gumbel_sigma)
-#       prev = prev + g
+      if num_steps_gumbel == -1 or i <= num_steps_gumbel:
+          g = unstacked_gumbel[i]
+          prev = prev + gumbel_mu + (g*gumbel_sigma)
+    #       prev = prev + g
     probabilities = tf.nn.softmax(prev)
     prev_symbol = math_ops.argmax(prev, 1)
     # Note that gradients will not propagate through the second parameter of
@@ -278,7 +280,8 @@ def embedding_rnn_decoder(decoder_inputs,
                           fixed_embedding=None,
                           gumbel=None,
                           gumbel_mu=None,
-                          gumbel_sigma=None):
+                          gumbel_sigma=None,
+                          num_steps_gumbel=-1):
   """RNN decoder with embedding and a pure-decoding option.
 
   Args:
@@ -341,7 +344,7 @@ def embedding_rnn_decoder(decoder_inputs,
     loop_function = _extract_argmax_and_embed(
         embedding, output_projection,
         update_embedding_for_previous, vague_weights, fixed_embedding,
-        gumbel, gumbel_mu, gumbel_sigma) if feed_previous else None
+        gumbel, gumbel_mu, gumbel_sigma, num_steps_gumbel) if feed_previous else None
     emb_inp = (embedding_ops.embedding_lookup(embedding, i)
                for i in decoder_inputs)
     return rnn_decoder(
